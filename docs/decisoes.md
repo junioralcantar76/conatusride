@@ -129,3 +129,54 @@ Tratar essas médias como indicador de forma levaria a conclusões erradas.
 
 **Consequência** — Existe um documento de fases (`fases.md`) registrando o
 contexto ano a ano. É ele que dá sentido às variações nos dados.
+
+---
+
+## 12. Ponto de partida extraído dos arquivos de traçado
+
+**Decisão** — Um script separado (`src/pontos_partida.py`) lê a coordenada
+inicial de cada arquivo em `data/raw/activities/` e grava na tabela
+`pontos_partida`, ligada a `pedais` pelo nome do arquivo.
+
+**Razão** — O `activities.csv` não traz coordenada nenhuma. Sem isso, separar
+pedal urbano de evento ou viagem dependeria de adivinhar pelo nome da atividade.
+Com a coordenada, sai por distância medida.
+
+**Escopo** — Isto antecipa parte da v2, mas lê apenas o ponto inicial, não o
+traçado completo. A análise de streams segue fora da v1.
+
+**Formatos** — 596 arquivos `.fit.gz` e 361 `.gpx`. O script trata os dois.
+
+---
+
+## 13. Coordenada zerada é descartada
+
+**Decisão** — Coordenada com latitude e longitude ambas abaixo de 1 grau é
+tratada como ausente, e o script busca o primeiro ponto real do traçado.
+
+**Razão** — Cerca de 36% dos arquivos FIT gravam `start_position` como zero em
+vez de omitir o campo. Zero é uma coordenada válida em tese — fica no Golfo da
+Guiné — e a primeira execução do script colocou 212 pedais a mais de 4.000 km
+de Fortaleza. Depois da correção, restaram 28 pedais acima de 300 km, que são
+as férias na Paraíba.
+
+**Lição** — Vale desconfiar de qualquer resultado geográfico que não faça
+sentido narrativo antes de aceitá-lo como padrão.
+
+---
+
+## 14. Duas classificações independentes
+
+**Decisão** — Os pedais recebem dois campos distintos:
+
+- **tipo**, por onde começaram e por contexto: `exploracao` (300+ km de
+  Fortaleza), `evento` (50–300 km), `treino` (curtos de 2026), `local_longo`,
+  `local_medio`, `local_curto`.
+- **porte**, pela escala de esforço percebido: `longao` acima de 79 km,
+  `medio` de 50 a 78, `curto` abaixo de 50.
+
+**Razão** — Medem coisas diferentes. Um pedal pode ser rotina e longão ao mesmo
+tempo. A escala de porte é a percepção atual e, aplicada ao passado, mostra o
+crescimento: 2021 não tem nenhum médio ou longão.
+
+**Pendente** — Ainda não estão fixados na base; hoje são calculados em consulta.

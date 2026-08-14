@@ -69,7 +69,8 @@ pedais novos.
 - Importar a exportação — **concluído**
 - Normalizar os campos para formato próprio — **concluído**
 - Armazenar sem duplicar — **concluído**
-- Consultar por período
+- Consultar por período — **concluído**
+- Extrair ponto de partida dos arquivos de traçado — **concluído**
 - Visualizar
 
 ### Não funcionais
@@ -87,8 +88,22 @@ pedais novos.
 2. ~~Solicitar a exportação no Strava~~ — concluído
 3. ~~Inventariar o conteúdo~~ — concluído
 4. ~~Importar e normalizar para o DuckDB~~ — concluído
-5. Definir as perguntas — em andamento; exploração continua
-6. Visualização
+5. Definir as perguntas — **concluído**; exploração segue em aberto
+6. Visualização — em andamento
+
+## Sobre a visualização
+
+Existia antes um painel em BI, construído em torno de uma meta anual de 6.000 km:
+déficit, atraso de ritmo, ritmo necessário, quanto falta. Metade dos indicadores
+era cobrança, e a tela refletia a fase de 2022–2023, de provar limites.
+
+Não é o que o projeto quer hoje. O que aproveitar dela: os acumulados (km, horas,
+atividades) e a consistência (semanas pedaladas). O que deixar de fora: meta,
+déficit, atraso, projeção.
+
+A lógica se inverte — em vez de "quanto falta para a meta", mostrar "o que
+aconteceu e por quê": a linha do tempo com as fases, os tipos de pedal e os
+acumulados.
 
 ## Base atual
 
