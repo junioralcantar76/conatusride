@@ -1,8 +1,11 @@
 """
 conatusride — view de consulta com as classificações.
 
-Cria `vw_pedais` no banco: tudo de `pedais`, mais o ponto de partida e os campos
-`tipo` e `porte`.
+Cria `vw_pedais` no banco: tudo de `pedais`, mais os pontos de partida e de
+chegada e os campos `tipo` e `porte`.
+
+O ponto de chegada é derivado aqui a partir de `tracos` (último ponto de cada
+arquivo), sem reprocessar os arquivos de traçado.
 
 É view, não tabela, porque `tipo` depende de `pontos_partida`, gerada por outro
 script. Coluna gravada ficaria desatualizada sempre que um dos dois rodasse
@@ -23,19 +26,39 @@ BANCO = RAIZ / "data" / "conatusride.duckdb"
 
 # ---------------------------------------------------------------- regras
 #
-# tipo — natureza do pedal, definida por onde começou e em que fase.
-#   exploracao   ponto de partida a 300+ km de Fortaleza. Férias no interior,
+# tipo — natureza do pedal, definida por onde aconteceu e em que fase.
+#
+# Distância considerada = a MENOR entre a partida e a chegada. Basta uma ponta
+# perto de Fortaleza para ser pedal local: quem sai de Beberibe e volta para
+# casa fez um pedal longo, não um evento. Só olhar a partida classificava a ida
+# e a volta do mesmo passeio em tipos diferentes.
+#
+#   exploracao   ambas as pontas a 300+ km de Fortaleza. Férias no interior,
 #                rota nova, terra e asfalto alternados.
-#   evento       50 a 300 km. Trilhas em cidades do interior, quase sempre
-#                eventos festivos com data marcada.
+#   evento       50 a 300 km nas duas pontas. Trilhas em cidades do interior,
+#                quase sempre eventos festivos com data marcada.
 #   treino       2026 em diante, até 20 km. Bloco matinal curto e rápido que
 #                substituiu o pedal noturno urbano. Antes de 2026 um pedal
 #                curto não era treino: era passeio ou pedal noturno de grupo.
-#   local_*      Fortaleza e região, separados por distância.
+#   pedal_*      Fortaleza e região, separados por distância.
 #
 # porte — esforço percebido, escala do próprio ciclista.
 #   É régua de 2026 aplicada ao passado: mostra o crescimento, já que 2021 não
 #   tem nenhum médio ou longão.
+
+CHEGADA = """
+CREATE OR REPLACE VIEW vw_chegada AS
+WITH ultimo AS (
+    SELECT arquivo, max(ordem) AS fim FROM tracos GROUP BY 1
+)
+SELECT t.arquivo, t.lat AS lat_fim, t.lon AS lon_fim,
+       round(2 * 6371 * asin(sqrt(
+           pow(sin(radians(t.lat - (-3.7319)) / 2), 2)
+           + cos(radians(-3.7319)) * cos(radians(t.lat))
+           * pow(sin(radians(t.lon - (-38.5267)) / 2), 2)
+       )), 1) AS km_fim_fortaleza
+FROM tracos t JOIN ultimo u ON t.arquivo = u.arquivo AND t.ordem = u.fim
+"""
 
 VIEW = """
 CREATE OR REPLACE VIEW vw_pedais AS
@@ -44,14 +67,19 @@ SELECT
     t.lat,
     t.lon,
     t.km_de_fortaleza,
+    f.km_fim_fortaleza,
+    -- least() ignora nulos: com uma ponta só, vale ela. Sem nenhuma, fica
+    -- nulo e a classificação cai para as regras de distância — sem coordenada
+    -- não dá para afirmar que o pedal aconteceu longe de casa.
+    least(t.km_de_fortaleza, f.km_fim_fortaleza) AS km_de_casa,
 
     CASE
-        WHEN t.km_de_fortaleza >= 300           THEN 'exploracao'
-        WHEN t.km_de_fortaleza >= 50            THEN 'evento'
+        WHEN least(t.km_de_fortaleza, f.km_fim_fortaleza) >= 300 THEN 'exploracao'
+        WHEN least(t.km_de_fortaleza, f.km_fim_fortaleza) >= 50  THEN 'evento'
         WHEN p.ano >= 2026 AND p.distancia_km <= 20 THEN 'treino'
-        WHEN p.distancia_km >= 45               THEN 'local_longo'
-        WHEN p.distancia_km >= 25               THEN 'local_medio'
-        ELSE                                         'local_curto'
+        WHEN p.distancia_km >= 45               THEN 'pedal_longo'
+        WHEN p.distancia_km >= 25               THEN 'pedal_medio'
+        ELSE                                         'pedal_curto'
     END AS tipo,
 
     CASE
@@ -64,6 +92,7 @@ SELECT
 
 FROM pedais p
 LEFT JOIN pontos_partida t USING (arquivo)
+LEFT JOIN vw_chegada f USING (arquivo)
 """
 
 
@@ -75,12 +104,14 @@ def main() -> None:
 
     with duckdb.connect(str(BANCO)) as con:
         tabelas = {t[0] for t in con.execute("SHOW TABLES").fetchall()}
-        if "pontos_partida" not in tabelas:
-            raise RuntimeError(
-                "Tabela pontos_partida não existe. "
-                "Rode src/pontos_partida.py antes."
-            )
+        for exigida, script in (("pontos_partida", "pontos_partida.py"),
+                                ("tracos", "tracos.py")):
+            if exigida not in tabelas:
+                raise RuntimeError(
+                    f"Tabela {exigida} não existe. Rode src/{script} antes."
+                )
 
+        con.execute(CHEGADA)
         con.execute(VIEW)
 
         sem_ponto = con.execute(
