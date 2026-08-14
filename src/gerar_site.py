@@ -116,6 +116,9 @@ h2{font-size:17px;font-weight:500;margin:2.5rem 0 1rem}
 .leg{display:flex;gap:16px;font-size:12px;color:#8a8880;margin-top:12px;flex-wrap:wrap}
 .leg span{display:flex;align-items:center;gap:5px}
 .sw{width:10px;height:10px;border-radius:2px;display:inline-block}
+.grp{display:flex;align-items:baseline;gap:9px;margin:1.75rem 0 .25rem}
+.grp b{font-size:16px;font-weight:500}
+.grp small{font-size:13px;color:#8a8880}
 .pct{font-size:13px;color:#8a8880;padding:0 0 4px 66px;line-height:1.6}
 .cid{display:flex;flex-wrap:wrap;gap:7px;margin-top:.5rem}
 .cid span{font-size:13px;padding:4px 11px;border-radius:20px;background:#efeee9;color:#52514e}
@@ -269,6 +272,32 @@ def ler(con):
         )
     dados["marcantes"] = marcantes
 
+    tipos = {}
+    listas = {}
+    try:
+        for ano, tipo, n in con.execute("""
+            SELECT ano, tipo, count(*) FROM vw_pedais GROUP BY 1, 2
+        """).fetchall():
+            tipos.setdefault(int(ano), {})[tipo] = int(n)
+
+        # Só os tipos que valem detalhar: os raros e memoráveis. Os pedais
+        # curtos e médios são centenas e já aparecem nos agregados.
+        for ano, tipo, dia, mes, nome, km, elev, vel, arq in con.execute("""
+            SELECT ano, tipo, day(data), month(data), nome, distancia_km,
+                   ganho_elevacao_m, velocidade_media_kmh, arquivo
+            FROM (SELECT *, row_number() OVER (PARTITION BY ano, tipo
+                    ORDER BY distancia_km DESC) AS r FROM vw_pedais)
+            WHERE r <= 6 AND tipo IN ('evento', 'exploracao', 'pedal_longo')
+            ORDER BY ano, tipo, distancia_km DESC
+        """).fetchall():
+            listas.setdefault(int(ano), {}).setdefault(tipo, []).append(
+                (f"{int(dia)} {MESES[int(mes) - 1]}", nome, km, elev, vel, arq)
+            )
+    except duckdb.Error:
+        pass
+    dados["tipos"] = tipos
+    dados["listas"] = listas
+
     cidades = {}
     percursos = {}
     try:
@@ -343,6 +372,68 @@ def montar_indice(d) -> str:
     return "".join(partes)
 
 
+ORDEM_TIPOS = ["pedal_curto", "pedal_medio", "pedal_longo",
+               "treino", "evento", "exploracao"]
+
+COR_TIPO = {"pedal_curto": "#B5D4F4", "pedal_medio": "#378ADD",
+            "pedal_longo": "#185FA5", "treino": "#1baf7a",
+            "evento": "#eb6834", "exploracao": "#eda100"}
+
+LEGENDA_TIPO = {
+    "evento": "trilhas e eventos festivos no interior",
+    "exploracao": "férias no interior, rota nova",
+    "pedal_longo": "os mais longos de Fortaleza e região",
+}
+
+
+def bloco_tipos(ano: int, d) -> str:
+    conta = d["tipos"].get(ano, {})
+    if not conta:
+        return ""
+
+    total = sum(conta.values())
+    fatias, legenda = [], []
+    for tipo in ORDEM_TIPOS:
+        n = conta.get(tipo)
+        if not n:
+            continue
+        cor = COR_TIPO[tipo]
+        fatias.append(
+            f'<div title="{tipo}: {n}" '
+            f'style="width:{100 * n / total}%;background:{cor}"></div>'
+        )
+        legenda.append(
+            f'<span><i class="sw" style="background:{cor}"></i>{tipo} {n}</span>'
+        )
+
+    partes = [
+        "<h2>Tipos de pedal</h2>",
+        f'<div class="turno" style="height:26px;border-radius:4px">'
+        f'{"".join(fatias)}</div>',
+        f'<div class="leg">{"".join(legenda)}</div>',
+    ]
+
+    for tipo in ("evento", "exploracao", "pedal_longo"):
+        linhas = d["listas"].get(ano, {}).get(tipo, [])
+        if not linhas:
+            continue
+        partes.append(
+            f'<div class="grp"><i class="sw" style="background:{COR_TIPO[tipo]}">'
+            f'</i><b>{tipo}</b><small>{LEGENDA_TIPO[tipo]}</small></div>'
+        )
+        for quando, nome, km, elev, vel, arquivo in linhas:
+            partes.append(
+                f'<div class="row"><time>{quando}</time><em>{nome.strip()}</em>'
+                f'<b>{km:.1f}</b><u>km</u>'
+                f'<i>{num(elev or 0)} m</i><i>{vel:.1f} km/h</i></div>'
+            )
+            percurso = d["percursos"].get(arquivo)
+            if percurso:
+                partes.append(f'<div class="pct">{percurso}</div>')
+
+    return "".join(partes)
+
+
 def montar_ano(ano: int, d) -> str:
     a = next(x for x in d["anos"] if int(x["ano"]) == ano)
     fase = FASES.get(ano, {"nome": "", "frase": "", "texto": ""})
@@ -390,18 +481,7 @@ def montar_ano(ano: int, d) -> str:
     partes.append(barra_turno([int(a["manha"]), int(a["tarde"]), int(a["noite"])]))
     partes.append(legenda_turno())
 
-    marcantes = d["marcantes"].get(ano, [])
-    if marcantes:
-        partes.append("<h2>Os cinco maiores</h2>")
-        for quando, nome, km, elev, vel, arquivo in marcantes:
-            partes.append(
-                f'<div class="row"><time>{quando}</time><em>{nome.strip()}</em>'
-                f'<b>{km:.1f}</b><u>km</u>'
-                f'<i>{num(elev or 0)} m</i><i>{vel:.1f} km/h</i></div>'
-            )
-            percurso = d["percursos"].get(arquivo)
-            if percurso:
-                partes.append(f'<div class="pct">{percurso}</div>')
+    partes.append(bloco_tipos(ano, d))
 
     cidades = d["cidades"].get(ano, [])
     if cidades:
