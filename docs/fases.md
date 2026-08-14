@@ -92,6 +92,24 @@ quase o dobro de subida, porque é estrada limpa e sem trânsito.
 
 **Treino** — 2026 em diante, 15 a 16 km, 18,7 km/h, os mais planos. 9 pedais.
 
+## Onde pedalo
+
+**55 cidades em 3 estados** — Ceará (48), Paraíba (5) e Rio Grande do Norte (2).
+Contagem por cidades atravessadas, não pela cidade de origem: num pedal de 80 km
+passo por vários municípios.
+
+Fortaleza aparece em 902 pedais. Eusébio em 200 — fica no caminho de Aquiraz,
+então passo por lá em um de cada cinco pedais. Não aparecia nas contagens
+anteriores porque elas iam pelo nome dado ao pedal, e nenhum se chama Eusébio.
+Depois vêm Aquiraz (52), Ipaumirim (28), Caucaia (20), Baixio (12).
+
+**Ipaumirim é a base das férias**, no Centro-Sul do Ceará, a caminho da Paraíba.
+Explica os pedais distantes que se repetem ano após ano. Nunca apareceu no nome
+de nenhum pedal — só na coordenada.
+
+Na Paraíba: Cachoeira dos Índios, Bom Jesus, Santa Helena. Os pedais de férias,
+exploração de rota nova.
+
 ## Sobre as médias
 
 Nunca houve pedal para competir. As médias incluem paradas para comer e

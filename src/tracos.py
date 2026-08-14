@@ -7,7 +7,8 @@ traçado e cruza esses pontos com a malha municipal do IBGE.
 Grava duas tabelas:
 
     tracos      um ponto por minuto de cada pedal (lat, lon, ordem)
-    cidades     uma linha por pedal e cidade atravessada
+    cidades     uma linha por pedal e cidade atravessada, com a ordem de
+                entrada — permite reconstruir o percurso, não só o conjunto
 
 O ponto de partida (pontos_partida.py) diz de onde saí. Isto diz por onde passei
 — num pedal de 80 km atravesso vários municípios, e só o primeiro apareceria na
@@ -194,17 +195,17 @@ def identificar_cidades(tracos: pd.DataFrame) -> pd.DataFrame:
         lon_r=tracos["lon"].round(3),
     ).merge(achados, on=["lat_r", "lon_r"], how="left")
 
+    # `entrada` é o índice do primeiro ponto do pedal dentro daquela cidade.
+    # Ordenar por ele reconstrói o percurso na sequência real de passagem —
+    # sem isso só se sabe quais cidades foram atravessadas, não em que ordem.
+    # Num pedal de ida e volta a cidade repete; fica só a primeira passagem.
     cidades = (
         ligado.dropna(subset=["name_muni"])
         .groupby(["arquivo", "name_muni", "abbrev_state"], as_index=False)
-        .size()
-        .rename(
-            columns={
-                "name_muni": "cidade",
-                "abbrev_state": "uf",
-                "size": "pontos",
-            }
-        )
+        .agg(pontos=("ordem", "size"), entrada=("ordem", "min"))
+        .rename(columns={"name_muni": "cidade", "abbrev_state": "uf"})
+        .sort_values(["arquivo", "entrada"])
+        .reset_index(drop=True)
     )
 
     return cidades
@@ -233,6 +234,15 @@ def main() -> None:
                    count(DISTINCT cidade) AS cidades,
                    count(DISTINCT arquivo) AS pedais
             FROM cidades GROUP BY 1 ORDER BY pedais DESC
+        """).df().to_string(index=False))
+
+        print("\nexemplo de percurso reconstruído:")
+        print(con.execute("""
+            SELECT p.nome,
+                   string_agg(c.cidade, ' > ' ORDER BY c.entrada) AS percurso
+            FROM cidades c JOIN pedais p USING (arquivo)
+            GROUP BY p.arquivo, p.nome
+            ORDER BY count(*) DESC LIMIT 3
         """).df().to_string(index=False))
 
         print("\ncidades mais atravessadas:")
