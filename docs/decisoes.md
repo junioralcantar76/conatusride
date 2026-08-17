@@ -180,3 +180,103 @@ tempo. A escala de porte é a percepção atual e, aplicada ao passado, mostra o
 crescimento: 2021 não tem nenhum médio ou longão.
 
 **Pendente** — Ainda não estão fixados na base; hoje são calculados em consulta.
+
+---
+
+## 15. Classificação em três campos — pendente
+
+**Decisão** — Substituir o campo único `tipo` por três campos independentes. Um
+pedal pode ser evento *e* exploração ao mesmo tempo (Guaramiranga, 2023), e uma
+gaveta só não comporta isso.
+
+| Campo | O que responde | Valores |
+|---|---|---|
+| `tipo` | que espécie de pedal foi | rotina, treino, evento, viagem |
+| `porte` | qual o tamanho | curto, medio, longo |
+| `exploracao` | teve cidade inédita? | sim, não |
+
+**Porte** — curto abaixo de 50 km, médio de 50 a 74, longo de 75 em diante.
+Independe do tipo: Pindoretama e volta dá 100 km e é rotina de porte longo. Uma
+escala só, valendo para os dois campos, para nunca se contradizerem.
+
+**Exploração** — marca sim/não: o pedal atravessou ao menos uma cidade onde eu
+nunca tinha pedalado até aquela data. Não é sobre rota nova nem sobre distância,
+é sobre estar fora da rotina — uma trilha na região metropolitana conta. Vale
+para qualquer tipo. Calculável: as cidades têm data, basta percorrer em ordem
+cronológica.
+
+**Status** — definido, não aplicado. Vale revisar antes de mexer no código.
+
+---
+
+## 16. Região metropolitana em vez de raio em km — pendente
+
+**Decisão** — `rotina` passa a ser definida pelos 19 municípios da Região
+Metropolitana de Fortaleza, não por distância até o centro.
+
+**Razão** — Raio de 50 km separa mal. Baturité fica a 77 km e não é
+metropolitana; São Gonçalo do Amarante fica a 40 e é.
+
+**Efeito a conferir** — Paracuru e Trairi são metropolitanas por lei, mas 131 km
+até lá talvez não seja "rotina" no sentido vivido. Checar a lista contra a
+percepção antes de aplicar.
+
+**Viagem x evento** — viagem é 2 ou mais pedais em dias consecutivos com base no
+lugar (Ubajara, dois dias seguidos). Dia isolado seria evento — mas ver a
+decisão 17.
+
+---
+
+## 17. Evento é marcação manual — pendente
+
+**Decisão** — Evento não sai de regra automática. Fica registrado à mão em
+`docs/eventos.csv`.
+
+**Razão** — Evento não se define por geografia: existe trilha em Caucaia, dentro
+da região metropolitana, que é evento. O que separa evento de rotina é ter data
+marcada e organização — e isso o dado do Strava não sabe. As pistas disponíveis
+(a palavra "trilha" no nome, ritmo baixo de 12 a 13 km/h contra 17 na rotina)
+não são confiáveis sozinhas.
+
+**Formato** — três campos:
+
+```
+evento,cidade_local,data
+Guaramiranga,Guaramiranga CE,2023-07-09
+Trilha da Banana,Baturité CE,2022-05-15
+```
+
+**Preenchimento** — por um script que pergunta os campos no terminal e grava a
+linha. Formulário de verdade exigiria servidor; o navegador sozinho não escreve
+arquivo, e isso mudaria a arquitetura à toa.
+
+**Onde fica** — em `docs/`, não em `data/`. Não é dado do Strava, é conhecimento
+meu, mesma natureza do `fases.md`. Por isso vai para o Git, ao contrário dos
+dados. Com os anos, vira o registro dos eventos de que participei.
+
+**Partida** — gerar um rascunho com os candidatos prováveis para revisão, em vez
+de preencher do zero. São uns 20 a 30 em cinco anos.
+
+---
+
+## 18. Painel é instrumento, não narrativa
+
+**Decisão** — Reconstruir o painel em torno de filtros e densidade de
+informação, em vez de páginas narrativas com uma fase por tela.
+
+**Razão** — As primeiras páginas foram feitas como narrativa: pouca informação
+por tela, texto grande, história contada em ordem. Ficaram claras e não eram o
+que se usa no dia a dia. O que faz falta é poder filtrar e cruzar — ver como foi
+a semana, como está o mês — que é o que o BI anterior fazia.
+
+**Consequência técnica** — Filtro combinável exige os dados no navegador, não o
+resultado pré-somado. Os 961 pedais vão embutidos no HTML (~60 KB) e a página
+recalcula na hora. Isso substitui a arquitetura em que cada página trazia
+números já agregados.
+
+**Escopo** — Seis blocos definidos em `docs/painel.md`: visão do ano, evolução
+mensal, histórico filtrável, recordes, comparação entre anos e mapa. O histórico
+filtrável vem primeiro, por ser a fundação dos outros.
+
+**O texto das fases** continua no projeto, como camada de contexto sobre os
+números — não mais como estrutura da página.

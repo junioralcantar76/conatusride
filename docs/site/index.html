@@ -27,8 +27,16 @@ h2{font-size:17px;font-weight:500;margin:2.5rem 0 1rem}
 .head span{font-size:13px;color:#8a8880}
 .bars{display:flex;align-items:flex-end;gap:6px;height:140px}
 .bar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.bar{cursor:pointer}
 .bar i{display:block;border-radius:4px 4px 0 0;min-height:3px;background:#1baf7a;font-style:normal}
-.bar i.top{background:#eb6834}
+.bar.top i{background:#eb6834}
+.bar:hover i{opacity:.72}
+.bar.sel i{background:#1a1a19}
+.mes{margin:1.25rem 0 0;padding:1.1rem 1.25rem;background:#f4f3ef;border-radius:10px}
+.mes h3{font-size:15px;font-weight:500;margin:0 0 .35rem}
+.mes p{font-size:13px;color:#8a8880;margin:0 0 .5rem}
+.mes .row{border-top-color:#e4e2db}
+.tag{font-size:11px;padding:2px 8px;border-radius:20px;color:#52514e;white-space:nowrap}
 .bv,.bl{font-size:11px;color:#8a8880;text-align:center}
 .bv{margin-bottom:4px}.bl{margin-top:5px}
 .wk{display:flex;align-items:center;gap:10px;margin-top:14px}

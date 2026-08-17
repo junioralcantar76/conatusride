@@ -93,6 +93,11 @@ pedais novos.
 
 ## Sobre a visualização
 
+O escopo detalhado do painel está em [painel.md](painel.md) — seis blocos,
+ordem de construção e o que ficou em aberto.
+
+
+
 Existia antes um painel em BI, construído em torno de uma meta anual de 6.000 km:
 déficit, atraso de ritmo, ritmo necessário, quanto falta. Metade dos indicadores
 era cobrança, e a tela refletia a fase de 2022–2023, de provar limites.

@@ -90,8 +90,16 @@ h2{font-size:17px;font-weight:500;margin:2.5rem 0 1rem}
 .head span{font-size:13px;color:#8a8880}
 .bars{display:flex;align-items:flex-end;gap:6px;height:140px}
 .bar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.bar{cursor:pointer}
 .bar i{display:block;border-radius:4px 4px 0 0;min-height:3px;background:#1baf7a;font-style:normal}
-.bar i.top{background:#eb6834}
+.bar.top i{background:#eb6834}
+.bar:hover i{opacity:.72}
+.bar.sel i{background:#1a1a19}
+.mes{margin:1.25rem 0 0;padding:1.1rem 1.25rem;background:#f4f3ef;border-radius:10px}
+.mes h3{font-size:15px;font-weight:500;margin:0 0 .35rem}
+.mes p{font-size:13px;color:#8a8880;margin:0 0 .5rem}
+.mes .row{border-top-color:#e4e2db}
+.tag{font-size:11px;padding:2px 8px;border-radius:20px;color:#52514e;white-space:nowrap}
 .bv,.bl{font-size:11px;color:#8a8880;text-align:center}
 .bv{margin-bottom:4px}.bl{margin-top:5px}
 .wk{display:flex;align-items:center;gap:10px;margin-top:14px}
@@ -155,6 +163,33 @@ def navegacao(atual) -> str:
     return "<nav>" + "".join(itens) + "</nav>"
 
 
+SCRIPT_MES = """
+<script>
+const PEDAIS = %s, MESES = %s, CORES = %s;
+const alvo = document.getElementById('mes');
+let aberto = null;
+document.querySelectorAll('.bar').forEach(b => b.addEventListener('click', () => {
+  const m = b.dataset.mes;
+  document.querySelectorAll('.bar').forEach(o => o.classList.remove('sel'));
+  if (aberto === m) { aberto = null; alvo.innerHTML = ''; return; }
+  aberto = m; b.classList.add('sel');
+  const lista = PEDAIS[m] || [];
+  const km = lista.reduce((s, p) => s + p.k, 0);
+  let h = '<div class="mes"><h3>' + MESES[m - 1] + '</h3><p>' +
+    lista.length + (lista.length > 1 ? ' pedais' : ' pedal') + ' · ' +
+    Math.round(km).toLocaleString('pt-BR') + ' km</p>';
+  lista.forEach(p => {
+    h += '<div class="row"><time>' + p.d + '</time><em>' + p.n + '</em>' +
+      '<span class="tag" style="background:' + (CORES[p.t] || '#e4e2db') + '33">' +
+      p.t + '</span><b>' + p.k.toFixed(1) + '</b><u>km</u>' +
+      '<i>' + p.e.toLocaleString('pt-BR') + ' m</i>' +
+      '<i>' + p.v.toFixed(1) + ' km/h</i></div>';
+  });
+  alvo.innerHTML = h + '</div>';
+}));
+</script>"""
+
+
 def pagina(titulo: str, atual, corpo: str) -> str:
     return f"""<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8">
@@ -163,6 +198,15 @@ def pagina(titulo: str, atual, corpo: str) -> str:
 <body><div class="wrap">{navegacao(atual)}{corpo}
 <footer>conatusride · gerado a partir do histórico do Strava</footer>
 </div></body></html>"""
+
+
+def pagina_ano(ano: int, d) -> str:
+    script = SCRIPT_MES % (
+        json.dumps(d["todos"].get(ano, {}), ensure_ascii=False),
+        json.dumps(MESES, ensure_ascii=False),
+        json.dumps(COR_TIPO, ensure_ascii=False),
+    )
+    return pagina(str(ano), ano, montar_ano(ano, d) + script)
 
 
 def faixa_semanas(semanas: dict, rotulo: str = "semanas") -> str:
@@ -271,6 +315,25 @@ def ler(con):
             (quando, nome, km, elev, vel, arquivo)
         )
     dados["marcantes"] = marcantes
+
+    # Todos os pedais, para a lista que abre ao clicar num mês. São ~960
+    # registros, uns 60 KB de JSON — cabe embutido em cada página.
+    todos = {}
+    for ano, mes, dia, nome, km, elev, vel, tipo in con.execute("""
+        SELECT ano, month(data), day(data), nome, distancia_km,
+               ganho_elevacao_m, velocidade_media_kmh,
+               coalesce(tipo, '') AS tipo
+        FROM vw_pedais ORDER BY data
+    """).fetchall():
+        todos.setdefault(int(ano), {}).setdefault(int(mes), []).append({
+            "d": int(dia),
+            "n": (nome or "").strip(),
+            "k": round(float(km), 1),
+            "e": int(elev or 0),
+            "v": round(float(vel), 1),
+            "t": tipo,
+        })
+    dados["todos"] = todos
 
     tipos = {}
     listas = {}
@@ -465,16 +528,18 @@ def montar_ano(ano: int, d) -> str:
         pico = max(m[2] for m in meses)
         barras = []
         for mes, pedais, km in meses:
-            classe = " top" if km == pico else ""
+            classe = "bar top" if km == pico else "bar"
             barras.append(
-                f'<div class="bar" title="{MESES[mes - 1]}: {num(km)} km em '
-                f'{pedais} pedais"><div class="bv">{num(km)}</div>'
-                f'<i class="{classe.strip()}" style="height:{round(100 * km / pico)}%"></i>'
+                f'<div class="{classe}" data-mes="{mes}" title="{MESES[mes - 1]}: '
+                f'{num(km)} km em {pedais} pedais">'
+                f'<div class="bv">{num(km)}</div>'
+                f'<i style="height:{round(100 * km / pico)}%"></i>'
                 f'<div class="bl">{MESES[mes - 1]}</div></div>'
             )
         partes.append('<div class="head"><h2>Ao longo do ano</h2>'
-                      f'<span>{num(a["km"])} km · meta {num(a["meta"])}</span></div>')
+                      '<span>clique num mês para ver os pedais</span></div>')
         partes.append(f'<div class="bars">{"".join(barras)}</div>')
+        partes.append('<div id="mes"></div>')
 
     partes.append(faixa_semanas(d["semanas"].get(ano, {})))
     partes.append(barra_meta(a["km"], a["meta"]))
@@ -516,7 +581,7 @@ def main() -> None:
     for a in d["anos"]:
         ano = int(a["ano"])
         (SAIDA / f"ano_{ano}.html").write_text(
-            pagina(str(ano), ano, montar_ano(ano, d)), encoding="utf-8"
+            pagina_ano(ano, d), encoding="utf-8"
         )
         print(f"docs/site/ano_{ano}.html")
 
