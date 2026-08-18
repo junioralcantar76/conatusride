@@ -139,7 +139,24 @@ apagados. Clicar num mês abre o detalhe.
 
 Meta, turno, tipos e cidades saíram dela — vão para as páginas específicas.
 
-## Estado em 17/08
+## Estado em 18/08
+
+**Classificação fechada e aplicada** — três dimensões: porte (40/75), piso
+(estrada, misto, trilha) e tipo (exploração ou rotina). Ver decisões 19 a 22.
+
+**Protótipo do ano aprovado** — 2026 com os dez indicadores, evolução mensal em
+gráfico e tabela, e a composição nas três dimensões. Março foi o mês recorde
+(411 km); maior sequência do ano, 3 dias em julho.
+
+**A fazer** — construir o painel de verdade, começando pelo histórico filtrável.
+`src/gerar_site.py` está obsoleto: usa os tipos antigos (`pedal_curto`,
+`evento`, `viagem`) e vai quebrar. Como as páginas narrativas foram substituídas
+pelo escopo novo, o gerador será reescrito, não consertado.
+
+**Ajuste pendente** — no histórico filtrável, mostrar o tempo como `4h41` em vez
+de minutos.
+
+## Estado anterior — 17/08
 
 **Feito** — protótipo da página inicial (ano corrente) aprovado; protótipo do
 histórico filtrável aprovado; classificação em três campos aplicada.

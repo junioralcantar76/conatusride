@@ -283,67 +283,98 @@ números — não mais como estrutura da página.
 
 ---
 
-## 19. Classificação — aplicada, mas a rever
+## 19. Classificação em três dimensões
 
-**Estado** — Os três campos da decisão 15 foram implementados em
-`src/classificar.py` e rodam sobre a base:
+**Decisão** — Três dimensões independentes, cada uma medindo uma coisa só:
 
-| Campo | Valores |
-|---|---|
-| `tipo` | rotina, treino, evento, viagem |
-| `porte` | curto, medio, longo |
-| `exploracao` | sim, não |
+| Dimensão | Valores | Mede |
+|---|---|---|
+| `porte` | curto, medio, longo | o tamanho |
+| `piso` | estrada, misto, trilha | o terreno |
+| `tipo` | exploracao, rotina | se teve cidade inédita |
 
-**Região de rotina** — sete municípios: Fortaleza, Caucaia, Maracanaú,
-Maranguape, Aquiraz, Eusébio, Pindoretama. Não é a Região Metropolitana legal:
-Paracuru, Paraipaba, Trairi, São Luís do Curu, Chorozinho, Pacajus, Horizonte,
-Guaiúba, Itaitinga, Pacatuba e Cascavel foram retirados, porque ir até lá não é
-rotina vivida.
+**Razão** — A versão anterior tinha rotina, treino, evento e viagem num campo
+só, e elas se sobrepunham: uma viagem pode conter um evento, e treino é uma
+rotina com outra intenção. Um pedal não cabia numa gaveta só.
 
-Basta uma das pontas do pedal estar na região para ser rotina — quem sai de
-Fortaleza rumo a Chorozinho, ou volta de Beberibe para casa, fez pedal de rotina.
+**Resultado** — 34 explorações em cinco anos (3 em 2021, pico de 10 em 2022,
+depois 4 a 6 por ano). Piso: 923 estrada, 20 misto, 18 trilha. As assinaturas
+não se confundem — exploração tem 51,9 km e 9,1 m/km contra 30,1 e 4,8 da
+rotina; trilha roda a 12,3 km/h contra 16,0 da estrada.
 
-**Viagem x evento** — fora da região, dias de pedal agrupados com tolerância de
-até 3 dias de folga formam viagem; dia isolado é evento. A tolerância de 3 dias
-existe porque em férias há descanso no meio, e um corte rígido jogava pedais
-soltos para evento.
-
-**Resultado** — 13 eventos detectados, todos corretos (11 com "Trilha" no nome,
-mais Guaramiranga e Apuiarés). Exploração: 3 em 2021, 10 em 2022, depois 5 a 6
-por ano.
-
-**A rever** — Foram acrescentados campos e regras além do que estava combinado
-(`dentro_regiao`, `cidade_nova`, o CSV de eventos, a discussão de piso). Antes
-de seguir, definir juntos quais campos ficam.
+**Saíram do modelo** — treino, evento, viagem, a região de rotina, o
+`docs/eventos.csv` e o `src/eventos.py`.
 
 ---
 
-## 20. Trilha — definida, não aplicada
+## 20. Porte com propósito
 
-**Definição do ciclista** — pedal cuja maior parte da rota não é asfalto:
-estrada de terra, calçamento ou singletrack. Pode atravessar cidade no caminho.
+| Porte | Distância | O que é |
+|---|---|---|
+| curto | até 40 km | pedal rápido, treino, deslocamento |
+| medio | 41 a 75 km | pedal regular |
+| longo | acima de 75 km | pedal de resistência |
 
-**Como identificar** — pelo nome. O termo "trilha" é sempre usado no nome do
-pedal no Strava, e isso continuará.
-
-**Exceção conhecida** — "Aventura: Cofeco, trilha do mangue, Mangabeira"
-(18/09/2022) tem "trilha" no nome mas é pedal de rotina de domingo, 70 km, com
-um trecho curto de trilha. Uma exceção em cinco anos.
-
-**O dado do Strava não serve** — a coluna `distancia_terra_m` marca 1% na Trilha
-Apuiarés, que foi quase toda em terra. As estradas dessas regiões não constam
-como não pavimentadas no mapa do Strava. Não usar nem como complemento.
-
-**Onde entra** — num campo `piso` com três valores: estrada, trilha, misto.
-Separado de `tipo`. Falta definir o critério de misto.
+**Razão da mudança** — O corte anterior era 50 e 75. Com 40, o Maluaga (41 km)
+sobe para médio, separado dos treinos de 15 km, que é onde ele pertence.
 
 ---
 
-## 21. O CSV de eventos foi descartado
+## 21. Piso — marcação pelo nome
 
-**Decisão** — `docs/eventos.csv` e `src/eventos.py` não entram no projeto.
+**Definições do ciclista**
 
-**Razão** — Foram propostos para cobrir eventos dentro da região de rotina, que
-a regra automática não detecta. Na prática, misturaram trilha e evento numa
-lista só e criaram mais confusão do que resolveram. A classificação automática
-funciona sem eles.
+- **trilha** — maior parte da rota fora do asfalto: terra, calçamento ou
+  singletrack. Pode atravessar cidade no caminho.
+- **estrada** — predominância de asfalto ou rodovia. É o padrão.
+- **misto** — alterna os dois, sem predominância clara.
+
+**Como identificar** — pelo nome do pedal. O termo "trilha" sempre é usado, e de
+2026 em diante "misto" também será. Para trás, os casos foram levantados ano a
+ano com o ciclista e estão em listas de exceção no código.
+
+**O dado do Strava não serve** — `distancia_terra_m` marca 1% na Trilha Apuiarés,
+que foi quase toda em terra, e 0% no Posto Arizona, que é asfalto puro. Dois
+pedais do mesmo bloco de férias aparecem com 0% e 47%. As estradas dessas
+regiões não constam como não pavimentadas no mapa deles. Não usar nem como
+complemento.
+
+**Exceções registradas** — 19 mistos levantados um a um (2021 sem nenhum, 2023
+sem nenhum); "Terra na veia" (2022) é trilha sem a palavra no nome; "Aventura:
+Cofeco, trilha do mangue, Mangabeira" tem "trilha" no nome mas é rotina de
+domingo com um trecho curto de trilha — é misto, não trilha.
+
+---
+
+## 22. Exploração — permanência mínima de 5 minutos
+
+**Decisão** — Uma cidade só conta como explorada com mais de 5 minutos de
+permanência. Amostramos um ponto por minuto, então são 5 pontos.
+
+**Razão** — Em "Ceará - Paraíba" cruzei São João do Rio do Peixe em um minuto,
+na estrada entre Santa Helena e Bom Jesus. Entrei no território, mas não conheci
+nada.
+
+**Por que 5 e não 3** — O resultado hoje é idêntico (só Horizonte, São João do
+Rio do Peixe e Pentecoste ficam abaixo, todas com 1 ou 2 minutos). O corte foi
+escolhido pelo que significa: a 20 km/h, 5 minutos são quase 2 km — atravessar
+a cidade, não raspar a borda. Com corte menor, uma cidade pequena cortada pela
+rodovia contaria como explorada mesmo passando direto.
+
+**A marca é do pedal, não da cidade** — o pedal é exploração se atravessou ao
+menos uma cidade inédita. Em agosto de 2026 saí de Ipaumirim rumo a Triunfo:
+Ipaumirim e Baixio eu já conhecia, Triunfo e Umari não, então o pedal é
+exploração. O do dia seguinte, só em Ipaumirim e Baixio, é rotina.
+
+**Casos de borda resolvidos**
+
+- *Pedais sem coordenada* (5): são todos rotina urbana, estrada, e o porte sai
+  da distância. O padrão já acerta.
+- *Primeira vez de Fortaleza* (junho de 2021): marca exploração. É o marco
+  inicial do histórico, fica assim.
+- *Dois pedais no mesmo dia* (12/08/2025): passaram por lugares diferentes, sem
+  conflito.
+
+**Limitação conhecida** — A malha do IBGE só tem municípios. Olho d'Água é
+distrito de Ipaumirim, então um pedal até lá aparece como se eu tivesse ficado
+em Ipaumirim. Exploração de distrito não é detectável com este dado.
