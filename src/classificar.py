@@ -4,12 +4,15 @@ conatusride — classificação dos pedais.
 Grava a tabela `classificacao` e cria a view `vw_pedais`, que junta tudo de
 `pedais` com os pontos de partida e chegada e os três campos de classificação.
 
-Três campos independentes, porque um pedal pode ser evento *e* exploração ao
-mesmo tempo (Guaramiranga, 2023) — uma gaveta só não comporta isso.
+Três dimensões independentes, cada uma medindo uma coisa só:
 
-    tipo         rotina, treino, evento, viagem
-    porte        curto, medio, longo
-    exploracao   sim ou não
+    porte   curto, medio, longo      — o tamanho
+    piso    estrada, misto, trilha   — o terreno
+    tipo    exploracao, rotina       — se teve cidade inédita
+
+A versão anterior usava rotina, treino, evento e viagem num campo só, e elas se
+sobrepunham: uma viagem pode conter um evento, e treino é uma rotina com outra
+intenção. Separar em dimensões resolve isso.
 
 Ordem: importar.py -> pontos_partida.py -> tracos.py -> metas.py ->
        classificar.py -> gerar_site.py
@@ -19,7 +22,6 @@ Uso:
 """
 
 from pathlib import Path
-import csv
 import unicodedata
 
 import duckdb
@@ -27,52 +29,50 @@ import pandas as pd
 
 RAIZ = Path(__file__).resolve().parent.parent
 BANCO = RAIZ / "data" / "conatusride.duckdb"
-EVENTOS = RAIZ / "docs" / "eventos.csv"
 
 # ---------------------------------------------------------------- regras
 #
 # tipo
-#   rotina   dentro da região de rotina (lista abaixo)
-#   treino   na região de rotina, até 20 km, de 2026 em diante. Antes disso um
-#            pedal curto não era treino: era passeio ou pedal noturno de grupo.
-#   viagem   fora da região, dois ou mais dias de pedal no mesmo período, com
-#            base no lugar (Ubajara, dois dias seguidos; férias em Ipaumirim).
-#            Tolera até 3 dias de folga dentro do bloco — em férias há dias de
-#            descanso no meio, e um corte rígido jogava esses pedais soltos para
-#            evento.
-#   evento   fora da região em dia isolado, ou marcado à mão em docs/eventos.csv
+#   exploracao   o pedal atravessou ao menos uma cidade onde eu nunca havia
+#                pedalado antes daquela data
+#   rotina       todas as cidades do percurso eu já conhecia
 #
-# Evento não se define por geografia — existe trilha em Caucaia, dentro da
-# região de rotina. O que separa evento de rotina é ter data marcada e
-# organização, e isso o dado do Strava não sabe. Por isso a marcação manual tem
-# a última palavra.
+# A marca é do pedal, não da cidade. Em agosto de 2026 saí de Ipaumirim rumo a
+# Triunfo: Ipaumirim e Baixio eu já conhecia, Triunfo e Umari não — então o
+# pedal é exploração. O do dia seguinte, se ficar só em Ipaumirim e Baixio, é
+# rotina. Voltar a um lugar não é explorar de novo.
 #
-# Dentro ou fora é decidido pelas cidades atravessadas: basta uma das pontas
-# estar na região. Quem sai de Beberibe e volta para casa fez um pedal de
-# rotina, não um evento — e quem sai de Fortaleza rumo a Chorozinho também.
+# Passagem de raspão não conta. Em "Ceará - Paraíba" cruzei São João do Rio do
+# Peixe em um minuto, na estrada entre Santa Helena e Bom Jesus — entrei no
+# território, mas não conheci nada. Só conta como cidade explorada quando houve
+# permanência: mais de MIN_PERMANENCIA minutos.
 #
-# porte — o mesmo tamanho, aplicado a qualquer pedal. Uma escala só, para os
-# campos nunca se contradizerem. Pindoretama e volta dá 100 km e é rotina de
-# porte longo.
+# Limitação conhecida: a malha do IBGE só tem municípios. Olho d'Água é distrito
+# de Ipaumirim, então um pedal até lá aparece como se eu tivesse ficado em
+# Ipaumirim. Exploração de distrito não é detectável com este dado.
+#
+# A primeira vez de Fortaleza, em junho de 2021, marca exploração. Tecnicamente
+# é o esperado — é o marco inicial do histórico.
+#
+# porte — o tamanho, com o propósito de cada faixa:
+#   curto   até 40 km — pedal rápido, treino, deslocamento
+#   medio   41 a 75 km — pedal regular
+#   longo   acima de 75 km — pedal de resistência
+# Independe do tipo: Pindoretama e volta dá 100 km e é rotina de porte longo.
+#
+# piso — o terreno. Ver a seção de marcação abaixo.
 #
 # exploracao — o pedal atravessou ao menos uma cidade onde eu nunca tinha
 # pedalado até aquela data. Não é sobre rota nova nem sobre distância, é sobre
 # estar fora da rotina: uma trilha na região metropolitana conta.
 
-# A região que eu rodo como rotina. Não é a Região Metropolitana legal: a lei
-# inclui Paracuru, Paraipaba, Trairi e São Luís do Curu, que ficam no litoral
-# oeste a mais de 100 km — ir até lá é pedal de viagem, não rotina. Saíram
-# também Chorozinho, Pacajus, Horizonte, Guaiúba, Itaitinga, Pacatuba e
-# Cascavel, pelo mesmo motivo.
-REGIAO_ROTINA = {
-    "fortaleza", "caucaia", "maracanau", "maranguape",
-    "aquiraz", "eusebio", "pindoretama",
-}
+# Minutos dentro de um município para contar como cidade explorada. Amostramos
+# um ponto por minuto, então 5 pontos são 5 minutos. A 20 km/h isso é quase 2 km
+# — atravessar a cidade, não raspar a borda. Com corte menor, uma cidade pequena
+# cortada pela rodovia contaria como explorada mesmo passando direto.
+MIN_PERMANENCIA = 5
 
-ANO_TREINO = 2026
-KM_TREINO = 20
-FOLGA_VIAGEM = 3
-KM_MEDIO = 50
+KM_MEDIO = 40
 KM_LONGO = 75
 
 
@@ -80,6 +80,68 @@ def chave(nome: str) -> str:
     """Minúsculo e sem acento, para comparar nome de cidade."""
     puro = unicodedata.normalize("NFKD", nome or "")
     return "".join(c for c in puro if not unicodedata.combining(c)).lower().strip()
+
+
+# ---------------------------------------------------------------- piso
+#
+# O dado do Strava não serve para isto. A coluna `distancia_terra_m` marca 1%
+# na Trilha Apuiarés, que foi quase toda em terra, e 0% no Posto Arizona, que é
+# asfalto puro — as estradas dessas regiões não constam como não pavimentadas
+# no mapa deles. Dois pedais do mesmo bloco de férias aparecem com 0% e 47%.
+#
+# Então a marcação é do ciclista, e vem pelo nome do pedal:
+#
+#   trilha   maior parte da rota fora do asfalto: terra, calçamento ou
+#            singletrack. Pode atravessar cidade no caminho.
+#   misto    alterna terra e asfalto, sem predominância clara.
+#   estrada  predominância de asfalto ou rodovia. É o padrão — a esmagadora
+#            maioria dos pedais.
+#
+# De 2026 em diante os nomes trazem "trilha" ou "misto" e a regra resolve
+# sozinha. Para trás, os casos foram levantados um a um, ano a ano, e estão nas
+# listas de exceção abaixo.
+
+# "trilha" no nome descreve um trecho, não o pedal: 70 km de rotina de domingo
+# com um pedaço curto de trilha no meio.
+NAO_E_TRILHA = {"2022-09-18"}
+
+# Trilha sem a palavra no nome.
+E_TRILHA = {"2022-10-15"}  # Terra na veia
+
+# Levantados ano a ano com o ciclista. 2021 ficou de fora (só pedais urbanos
+# curtos) e 2023 não teve nenhum.
+E_MISTO = {
+    "2022-06-16",  # Feriado Corpus Christi
+    "2022-09-18",  # Aventura: Cofeco, trilha do mangue, Mangabeira
+    "2024-04-20",  # Cachoeiras do pinga
+    "2024-10-02",  # Santa Helena
+    "2024-10-03",  # Olho d'água
+    "2024-09-20",  # Bom Jesus
+    "2025-08-07",  # Baixio - São Vicente
+    "2025-08-08",  # Bom Jesus
+    "2025-08-10",  # Serrote / Trapiá
+    "2025-08-11",  # Santa Helena PB
+    "2025-08-12",  # Olho d'água
+    "2025-08-18",  # Jurema - Baixio (via Br 116)
+    "2025-08-19",  # Bom Jesus - PB / Serrote
+    "2025-08-24",  # Santa Helena - Bom Jesus
+    "2026-08-01",  # Ceará - Paraíba
+    "2026-08-03",  # Bom Jesus - Br 116
+    "2026-08-04",  # Jurema - Baixio
+    "2026-08-06",  # Bom Jesus - Cachoeira dos Índios - Br116
+    "2026-08-08",  # Triunfo Pb
+}
+
+
+def piso(nome: str, dia: str) -> str:
+    texto = chave(nome)
+    if dia in E_TRILHA:
+        return "trilha"
+    if "trilha" in texto and dia not in NAO_E_TRILHA:
+        return "trilha"
+    if "misto" in texto or dia in E_MISTO:
+        return "misto"
+    return "estrada"
 
 
 def porte(km: float) -> str:
@@ -90,85 +152,40 @@ def porte(km: float) -> str:
     return "curto"
 
 
-def ler_eventos() -> set:
-    """Datas marcadas à mão como evento.
-
-    docs/eventos.csv, colunas evento,cidade_local,data — data em AAAA-MM-DD.
-    """
-    if not EVENTOS.exists():
-        return set()
-    with EVENTOS.open(encoding="utf-8") as f:
-        return {
-            linha["data"].strip()
-            for linha in csv.DictReader(f)
-            if linha.get("data", "").strip()
-        }
-
-
-def classificar(pedais: pd.DataFrame, cidades: pd.DataFrame,
-                marcados: set) -> pd.DataFrame:
+def classificar(pedais: pd.DataFrame, cidades: pd.DataFrame) -> pd.DataFrame:
+    """Percorre os pedais em ordem cronológica marcando as estreias."""
     pedais = pedais.sort_values("data").reset_index(drop=True)
 
+    # Cidades de cada pedal, na ordem de passagem, com quanto tempo em cada uma.
     por_arquivo = {}
     for arquivo, grupo in cidades.sort_values("entrada").groupby("arquivo"):
-        por_arquivo[arquivo] = list(grupo["cidade"])
+        por_arquivo[arquivo] = list(zip(grupo["cidade"], grupo["pontos"]))
 
-    vistas = set()
+    conhecidas = set()
     linhas = []
 
     for _, p in pedais.iterrows():
-        lista = por_arquivo.get(p["arquivo"], [])
-        chaves = [chave(c) for c in lista]
+        visitadas = por_arquivo.get(p["arquivo"], [])
 
-        if chaves:
-            dentro = chaves[0] in REGIAO_ROTINA or chaves[-1] in REGIAO_ROTINA
-        else:
-            # Sem cidade identificada, cai para a distância até Fortaleza.
-            km = p["km_de_casa"]
-            dentro = pd.isna(km) or km < 50
+        # Só conta como estar na cidade quando houve permanência.
+        com_parada = [
+            (nome, chave(nome)) for nome, minutos in visitadas
+            if minutos > MIN_PERMANENCIA
+        ]
 
-        novas = [c for c in chaves if c not in vistas]
-        nomes_novos = [lista[chaves.index(c)] for c in novas]
-        vistas.update(chaves)
+        novas = [nome for nome, k in com_parada if k not in conhecidas]
+        conhecidas.update(k for _, k in com_parada)
 
+        dia = pd.Timestamp(p["data"]).strftime("%Y-%m-%d")
         linhas.append({
             "id": p["id"],
-            "data": p["data"],
-            "dentro_regiao": bool(dentro),
-            "exploracao": bool(novas),
-            "cidade_nova": ", ".join(nomes_novos) if novas else None,
+            "tipo": "exploracao" if novas else "rotina",
             "porte": porte(p["distancia_km"]),
-            "_ano": int(p["ano"]),
-            "_km": float(p["distancia_km"]),
-            "_dia": pd.Timestamp(p["data"]).date(),
+            "piso": piso(p["nome"], dia),
+            "cidade_nova": ", ".join(novas) if novas else None,
         })
 
-    df = pd.DataFrame(linhas)
-
-    # Fora da RMF: dias consecutivos viram viagem; dia isolado, evento.
-    dias_fora = sorted(set(df.loc[~df["dentro_regiao"], "_dia"]))
-    em_viagem, bloco = set(), []
-    for dia in dias_fora:
-        if bloco and (dia - bloco[-1]).days <= FOLGA_VIAGEM:
-            bloco.append(dia)
-        else:
-            if len(bloco) >= 2:
-                em_viagem.update(bloco)
-            bloco = [dia]
-    if len(bloco) >= 2:
-        em_viagem.update(bloco)
-
-    def tipo(linha):
-        if linha["data"].strftime("%Y-%m-%d") in marcados:
-            return "evento"
-        if not linha["dentro_regiao"]:
-            return "viagem" if linha["_dia"] in em_viagem else "evento"
-        if linha["_ano"] >= ANO_TREINO and linha["_km"] <= KM_TREINO:
-            return "treino"
-        return "rotina"
-
-    df["tipo"] = df.apply(tipo, axis=1)
-    return df[["id", "tipo", "porte", "exploracao", "cidade_nova", "dentro_regiao"]]
+    return pd.DataFrame(linhas)
 
 
 VIEW_CHEGADA = """
@@ -186,7 +203,7 @@ VIEW_PEDAIS = """
 CREATE OR REPLACE VIEW vw_pedais AS
 SELECT p.*, t.lat, t.lon, t.km_de_fortaleza, f.km_fim_fortaleza,
        least(t.km_de_fortaleza, f.km_fim_fortaleza) AS km_de_casa,
-       c.tipo, c.porte, c.exploracao, c.cidade_nova, c.dentro_regiao,
+       c.tipo, c.porte, c.piso, c.cidade_nova,
        hour(p.data) >= 19 AS noturno
 FROM pedais p
 LEFT JOIN pontos_partida t USING (arquivo)
@@ -212,23 +229,17 @@ def main() -> None:
         con.execute(VIEW_CHEGADA)
 
         pedais = con.execute("""
-            SELECT p.id, p.arquivo, p.data, p.ano, p.distancia_km,
+            SELECT p.id, p.arquivo, p.data, p.ano, p.nome, p.distancia_km,
                    least(t.km_de_fortaleza, f.km_fim_fortaleza) AS km_de_casa
             FROM pedais p
             LEFT JOIN pontos_partida t USING (arquivo)
             LEFT JOIN vw_chegada f USING (arquivo)
         """).df()
         cidades = con.execute(
-            "SELECT arquivo, cidade, entrada FROM cidades"
+            "SELECT arquivo, cidade, entrada, pontos FROM cidades"
         ).df()
 
-        marcados = ler_eventos()
-        if marcados:
-            print(f"{len(marcados)} evento(s) marcado(s) em docs/eventos.csv")
-        else:
-            print("docs/eventos.csv ainda não existe — evento sai só da regra")
-
-        resultado = classificar(pedais, cidades, marcados)
+        resultado = classificar(pedais, cidades)
 
         con.execute("DROP TABLE IF EXISTS classificacao")
         con.execute("CREATE TABLE classificacao AS SELECT * FROM resultado")
@@ -240,22 +251,28 @@ def main() -> None:
                    round(avg(distancia_km), 1) AS km,
                    round(avg(velocidade_media_kmh), 1) AS kmh,
                    round(avg(ganho_elevacao_m / distancia_km), 1) AS m_por_km,
-                   sum(exploracao::INT) AS com_cidade_nova,
                    min(ano) AS de, max(ano) AS ate
             FROM vw_pedais GROUP BY 1 ORDER BY pedais DESC
         """).df().to_string(index=False))
 
         print()
         print(con.execute("""
+            SELECT piso, count(*) AS pedais,
+                   round(avg(distancia_km), 1) AS km,
+                   round(avg(velocidade_media_kmh), 1) AS kmh,
+                   round(avg(ganho_elevacao_m / distancia_km), 1) AS m_por_km
+            FROM vw_pedais GROUP BY 1 ORDER BY pedais DESC
+        """).df().to_string(index=False))
+
+        print()
+        print(con.execute("""
             SELECT ano,
-                   sum((tipo = 'rotina')::INT) AS rotina,
-                   sum((tipo = 'treino')::INT) AS treino,
-                   sum((tipo = 'evento')::INT) AS evento,
-                   sum((tipo = 'viagem')::INT) AS viagem,
-                   sum((porte = 'curto')::INT) AS curto,
-                   sum((porte = 'medio')::INT) AS medio,
-                   sum((porte = 'longo')::INT) AS longo,
-                   sum(exploracao::INT)        AS exploracao
+                   sum((tipo = 'exploracao')::INT) AS exploracao,
+                   sum((porte = 'curto')::INT)  AS curto,
+                   sum((porte = 'medio')::INT)  AS medio,
+                   sum((porte = 'longo')::INT)  AS longo,
+                   sum((piso = 'misto')::INT)   AS misto,
+                   sum((piso = 'trilha')::INT)  AS trilha
             FROM vw_pedais GROUP BY 1 ORDER BY ano
         """).df().to_string(index=False))
 

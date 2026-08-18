@@ -139,6 +139,20 @@ apagados. Clicar num mês abre o detalhe.
 
 Meta, turno, tipos e cidades saíram dela — vão para as páginas específicas.
 
+## Estado em 17/08
+
+**Feito** — protótipo da página inicial (ano corrente) aprovado; protótipo do
+histórico filtrável aprovado; classificação em três campos aplicada.
+
+**A fazer** — `src/gerar_site.py` ainda usa os tipos antigos (`pedal_curto`,
+`pedal_medio`, `pedal_longo`) e vai quebrar com a classificação nova. Precisa
+ser atualizado antes de gerar o site.
+
+**Ajuste pedido** — no histórico, mostrar o tempo como `4h41` em vez de minutos.
+
+**A definir juntos** — quais campos de classificação ficam. Foram acrescentados
+mais campos e regras do que o combinado. Ver decisão 19.
+
 ## Em aberto
 
 - Comparação de anos na página inicial: entra ou fica só no bloco 5? Comparar km

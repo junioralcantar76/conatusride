@@ -280,3 +280,70 @@ filtrável vem primeiro, por ser a fundação dos outros.
 
 **O texto das fases** continua no projeto, como camada de contexto sobre os
 números — não mais como estrutura da página.
+
+---
+
+## 19. Classificação — aplicada, mas a rever
+
+**Estado** — Os três campos da decisão 15 foram implementados em
+`src/classificar.py` e rodam sobre a base:
+
+| Campo | Valores |
+|---|---|
+| `tipo` | rotina, treino, evento, viagem |
+| `porte` | curto, medio, longo |
+| `exploracao` | sim, não |
+
+**Região de rotina** — sete municípios: Fortaleza, Caucaia, Maracanaú,
+Maranguape, Aquiraz, Eusébio, Pindoretama. Não é a Região Metropolitana legal:
+Paracuru, Paraipaba, Trairi, São Luís do Curu, Chorozinho, Pacajus, Horizonte,
+Guaiúba, Itaitinga, Pacatuba e Cascavel foram retirados, porque ir até lá não é
+rotina vivida.
+
+Basta uma das pontas do pedal estar na região para ser rotina — quem sai de
+Fortaleza rumo a Chorozinho, ou volta de Beberibe para casa, fez pedal de rotina.
+
+**Viagem x evento** — fora da região, dias de pedal agrupados com tolerância de
+até 3 dias de folga formam viagem; dia isolado é evento. A tolerância de 3 dias
+existe porque em férias há descanso no meio, e um corte rígido jogava pedais
+soltos para evento.
+
+**Resultado** — 13 eventos detectados, todos corretos (11 com "Trilha" no nome,
+mais Guaramiranga e Apuiarés). Exploração: 3 em 2021, 10 em 2022, depois 5 a 6
+por ano.
+
+**A rever** — Foram acrescentados campos e regras além do que estava combinado
+(`dentro_regiao`, `cidade_nova`, o CSV de eventos, a discussão de piso). Antes
+de seguir, definir juntos quais campos ficam.
+
+---
+
+## 20. Trilha — definida, não aplicada
+
+**Definição do ciclista** — pedal cuja maior parte da rota não é asfalto:
+estrada de terra, calçamento ou singletrack. Pode atravessar cidade no caminho.
+
+**Como identificar** — pelo nome. O termo "trilha" é sempre usado no nome do
+pedal no Strava, e isso continuará.
+
+**Exceção conhecida** — "Aventura: Cofeco, trilha do mangue, Mangabeira"
+(18/09/2022) tem "trilha" no nome mas é pedal de rotina de domingo, 70 km, com
+um trecho curto de trilha. Uma exceção em cinco anos.
+
+**O dado do Strava não serve** — a coluna `distancia_terra_m` marca 1% na Trilha
+Apuiarés, que foi quase toda em terra. As estradas dessas regiões não constam
+como não pavimentadas no mapa do Strava. Não usar nem como complemento.
+
+**Onde entra** — num campo `piso` com três valores: estrada, trilha, misto.
+Separado de `tipo`. Falta definir o critério de misto.
+
+---
+
+## 21. O CSV de eventos foi descartado
+
+**Decisão** — `docs/eventos.csv` e `src/eventos.py` não entram no projeto.
+
+**Razão** — Foram propostos para cobrir eventos dentro da região de rotina, que
+a regra automática não detecta. Na prática, misturaram trilha e evento numa
+lista só e criaram mais confusão do que resolveram. A classificação automática
+funciona sem eles.
