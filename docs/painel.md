@@ -139,6 +139,46 @@ apagados. Clicar num mês abre o detalhe.
 
 Meta, turno, tipos e cidades saíram dela — vão para as páginas específicas.
 
+## Estado em 19/08
+
+### Telas aprovadas
+
+**Inicial** — abre no mês corrente, não no ano inteiro. De cima para baixo:
+
+1. Filtros de ano, mês e semana (o mês vem preenchido com o atual)
+2. Cinco cards grandes com ícone e número em laranja: total km, velocidade
+   média, pedais, horas, elevação
+3. Cinco indicadores menores: maior pedal, maior subida, média por pedal, dias
+   pedalados, sequência
+4. **Semanas** do mês selecionado, em barras horizontais, comparadas entre si.
+   Clicáveis. Ao filtrar uma semana ela é destacada, não isolada — a comparação
+   com as outras é o ponto.
+5. **Meses** do ano, em barras verticais, sempre o ano inteiro para a
+   comparação continuar válida. Clicáveis.
+6. **Composição** em faixas coloridas com rótulo e contagem dentro: piso, porte
+   e tipo.
+
+**Detalhe do mês** — resumo em seis indicadores; tabela "Por onde andei" com
+cidade, UF, quantas vezes e as datas de cada passagem, marcando as estreias;
+composição; e a lista de pedais com a rota de cada um.
+
+**Histórico filtrável** — funciona, mas ficou seco esteticamente e não é a tela
+do dia a dia. Em espera.
+
+### Navegação
+
+Menu no topo com as seções, mais navegação por clique para aprofundar: clicar
+num mês na inicial abre o detalhe daquele mês.
+
+O detalhe do mês é **uma tela só** que recebe o mês escolhido, não um arquivo
+por mês — seriam uns 60 arquivos para o mesmo resultado.
+
+### A fazer
+
+Protótipos de recordes, comparação entre anos e mapa. Depois, o gerador.
+
+`src/gerar_site.py` continua obsoleto e será reescrito, não consertado.
+
 ## Estado em 18/08
 
 **Classificação fechada e aplicada** — três dimensões: porte (40/75), piso

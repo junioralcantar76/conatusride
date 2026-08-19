@@ -1,16 +1,16 @@
 """
-conatusride — gerador das páginas HTML.
+conatusride — gerador do painel.
 
-Lê o banco e escreve um site estático em docs/site/: uma página de visão geral
-e uma por ano.
+Lê o banco e escreve o painel em docs/site/. Por ora só a tela inicial; as
+demais entram depois.
 
 Os dados vão embutidos no HTML, não em arquivo separado: navegador aberto em
-file:// bloqueia leitura de JSON local, e assim cada página funciona sozinha,
-inclusive copiada para o celular.
+file:// bloqueia leitura de JSON local, e assim a página funciona sozinha,
+inclusive copiada para o celular. São ~960 pedais, uns 60 KB.
 
-Rode de novo depois de atualizar o banco para regerar tudo.
+Rode de novo depois de atualizar o banco.
 
-Ordem: importar.py -> pontos_partida.py -> metas.py -> tracos.py ->
+Ordem: importar.py -> pontos_partida.py -> tracos.py -> metas.py ->
        classificar.py -> gerar_site.py
 
 Uso:
@@ -26,566 +26,284 @@ RAIZ = Path(__file__).resolve().parent.parent
 BANCO = RAIZ / "data" / "conatusride.duckdb"
 SAIDA = RAIZ / "docs" / "site"
 
-MESES = ["jan", "fev", "mar", "abr", "mai", "jun",
-         "jul", "ago", "set", "out", "nov", "dez"]
-
-# Contexto de cada ano. Vem de docs/fases.md, não do Strava — é o que dá
-# sentido aos números.
-FASES = {
-    2021: {
-        "nome": "descoberta",
-        "frase": "Início, sem pretensão.\nEntrar em forma, perder peso,\nsem noção da situação.",
-        "texto": "Pedais curtos e frequentes. Era o começo de tudo.",
-    },
-    2022: {
-        "nome": "imersão",
-        "frase": "Entro no mundo do pedal,\nbem amador, em grupos\nde iniciantes.",
-        "texto": "Gera uma vontade grande de pedalar, de conhecer e explorar. Ano de maior frequência — 4,9 pedais por semana, e nenhuma semana sem pedalar.",
-    },
-    2023: {
-        "nome": "limites",
-        "frase": "Já bem engajado.\nQueria ver meus limites,\nprovar que consigo.",
-        "texto": "Ano de maior quilometragem e de maior elevação — 6,5 m de subida por km, o terreno mais duro de todos. É quando aparecem as viagens longas.",
-    },
-    2024: {
-        "nome": "limbo",
-        "frase": "Nova fase.\nJá entendia o mundo do pedal\ne fiquei procurando direção.",
-        "texto": "A frequência cai, mas a distância média sobe. Menos pedais, mais longos.",
-    },
-    2025: {
-        "nome": "distanciamento",
-        "frase": "Criei certo receio.\nFicou chato por situações\nem grupo.",
-        "texto": "Percebi interesses de colegas, fui criando distância e repensando o pedal. Mesmo assim, 50 das 52 semanas tiveram pedal.",
-    },
-    2026: {
-        "nome": "escolha própria",
-        "frase": "O pedal de grupo\nnão me acrescentava mais.\nEnjoei desse tipo de pedal.",
-        "texto": "Acabou a fase dos pedais noturnos em Fortaleza com o grupo — o grupo enfraqueceu e eu percebi o risco: trânsito e violência. Resolvi estudar à noite. Último noturno da fase antiga: 18 de dezembro de 2025. No lugar dele, entrou o treino curto de manhã.",
-    },
-}
+SECOES = [
+    ("index.html", "início"),
+    ("mes.html", "mês"),
+    ("historico.html", "histórico"),
+    ("recordes.html", "recordes"),
+    ("anos.html", "anos"),
+    ("mapa.html", "mapa"),
+]
 
 CSS = """
 *{box-sizing:border-box}
-body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-background:#faf9f7;color:#1a1a19;line-height:1.6;-webkit-font-smoothing:antialiased}
-.wrap{max-width:860px;margin:0 auto;padding:2rem 1.5rem 5rem}
-nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2.5rem}
-nav a{font-size:13px;padding:5px 13px;border-radius:20px;text-decoration:none;color:#6b6a65}
+body{margin:0;background:#faf9f7;color:#1a1a19;line-height:1.55;
+font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto;padding:1.5rem 1.25rem 4rem}
+nav{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:1.75rem;
+border-bottom:1px solid #e4e2db;padding-bottom:.75rem}
+nav a{font-size:13px;padding:6px 14px;border-radius:20px;text-decoration:none;color:#6b6a65}
 nav a:hover{background:#efeee9;color:#1a1a19}
 nav a.on{background:#1a1a19;color:#faf9f7}
-h1{font-size:26px;font-weight:500;margin:0 0 .35rem}
-.sub{font-size:14px;color:#6b6a65;margin:0 0 2.5rem}
-.eyebrow{font-size:12px;letter-spacing:.09em;margin-bottom:8px}
-.frase{font-family:Georgia,'Times New Roman',serif;font-size:31px;line-height:1.3;margin:0 0 12px;white-space:pre-line}
-.texto{font-size:15px;color:#52514e;max-width:56ch;margin:0}
-.nums{display:flex;align-items:flex-end;gap:2rem;flex-wrap:wrap;
-padding:1.75rem 0;border-top:1px solid #e4e2db;border-bottom:1px solid #e4e2db;margin:2.25rem 0}
-.n{font-family:Georgia,serif;line-height:1}
-.n.hero{font-size:52px}
-.n.big{font-size:32px}
-.nl{font-size:12px;color:#8a8880;margin-top:4px}
-h2{font-size:17px;font-weight:500;margin:2.5rem 0 1rem}
-.head{display:flex;justify-content:space-between;align-items:baseline;margin:2.5rem 0 1rem}
-.head h2{margin:0}
-.head span{font-size:13px;color:#8a8880}
-.bars{display:flex;align-items:flex-end;gap:6px;height:140px}
-.bar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
-.bar{cursor:pointer}
-.bar i{display:block;border-radius:4px 4px 0 0;min-height:3px;background:#1baf7a;font-style:normal}
-.bar.top i{background:#eb6834}
-.bar:hover i{opacity:.72}
-.bar.sel i{background:#1a1a19}
-.mes{margin:1.25rem 0 0;padding:1.1rem 1.25rem;background:#f4f3ef;border-radius:10px}
-.mes h3{font-size:15px;font-weight:500;margin:0 0 .35rem}
-.mes p{font-size:13px;color:#8a8880;margin:0 0 .5rem}
-.mes .row{border-top-color:#e4e2db}
-.tag{font-size:11px;padding:2px 8px;border-radius:20px;color:#52514e;white-space:nowrap}
-.bv,.bl{font-size:11px;color:#8a8880;text-align:center}
-.bv{margin-bottom:4px}.bl{margin-top:5px}
-.wk{display:flex;align-items:center;gap:10px;margin-top:14px}
-.wk b{font-size:12px;color:#8a8880;font-weight:400;width:62px;flex:none}
-.wk div{display:flex;gap:2px;flex:1}
-.wk s{flex:1;height:16px;border-radius:2px;text-decoration:none;display:block}
-.yr{display:flex;align-items:center;gap:10px;margin-bottom:5px}
-.yr a{width:120px;flex:none;text-decoration:none;color:#1a1a19}
-.yr a small{display:block;font-size:11px;color:#8a8880}
-.row{display:flex;align-items:baseline;gap:14px;padding:11px 0;border-top:1px solid #e4e2db;font-size:14px}
-.row time{font-size:12px;color:#8a8880;width:52px;flex:none}
-.row em{flex:1;font-style:normal}
-.row b{font-family:Georgia,serif;font-size:19px;font-weight:400;width:64px;text-align:right}
-.row u{font-size:12px;color:#8a8880;width:24px;text-decoration:none}
-.row i{font-size:13px;color:#52514e;width:70px;text-align:right;font-style:normal}
-.meta{display:flex;align-items:center;gap:10px;margin:8px 0}
-.meta b{font-size:12px;color:#8a8880;font-weight:400;width:82px;flex:none}
-.track{flex:1;height:8px;border-radius:4px;background:#efeee9;overflow:hidden}
-.track i{display:block;height:100%;border-radius:4px;background:#1baf7a}
-.meta u{font-size:12px;color:#52514e;width:40px;text-align:right;text-decoration:none}
-.turno{flex:1;display:flex;height:8px;border-radius:4px;overflow:hidden;gap:2px}
-.leg{display:flex;gap:16px;font-size:12px;color:#8a8880;margin-top:12px;flex-wrap:wrap}
-.leg span{display:flex;align-items:center;gap:5px}
-.sw{width:10px;height:10px;border-radius:2px;display:inline-block}
-.grp{display:flex;align-items:baseline;gap:9px;margin:1.75rem 0 .25rem}
-.grp b{font-size:16px;font-weight:500}
-.grp small{font-size:13px;color:#8a8880}
-.pct{font-size:13px;color:#8a8880;padding:0 0 4px 66px;line-height:1.6}
-.cid{display:flex;flex-wrap:wrap;gap:7px;margin-top:.5rem}
-.cid span{font-size:13px;padding:4px 11px;border-radius:20px;background:#efeee9;color:#52514e}
-.cid span b{font-weight:400;color:#8a8880}
-footer{margin-top:4rem;padding-top:1.25rem;border-top:1px solid #e4e2db;font-size:12px;color:#8a8880}
-@media(max-width:640px){.frase{font-size:25px}.n.hero{font-size:42px}.n.big{font-size:26px}
-.nums{gap:1.25rem}.yr a{width:88px}}
+nav a.off{opacity:.4;pointer-events:none}
+
+.filtros{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:1.25rem}
+.sel{position:relative;display:inline-block}
+.sel select{appearance:none;-webkit-appearance:none;background:#fff;border:1px solid #e4e2db;
+border-radius:8px;padding:.45rem 2rem .45rem .8rem;font:inherit;font-size:13px;color:#1a1a19;cursor:pointer}
+.sel select:hover{border-color:#b8b5ad}
+.sel select:focus{outline:none;border-color:#1a1a19}
+.sel::after{content:"";position:absolute;right:.7rem;top:50%;width:6px;height:6px;pointer-events:none;
+border-right:1.5px solid #8a8880;border-bottom:1.5px solid #8a8880;transform:translateY(-70%) rotate(45deg)}
+.sel.on select{border-color:#1a1a19;background:#f4f3ef}
+.ctx{font-size:13px;color:#8a8880;margin-left:auto}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:10px}
+.card{background:#fff;border:1px solid #eeece6;border-radius:10px;padding:1rem;text-align:center}
+.card .ic{font-size:20px;line-height:1;margin-bottom:.4rem;opacity:.8}
+.card .lb{font-size:12px;color:#6b6a65;margin-bottom:.1rem}
+.card .vl{font-size:27px;font-weight:600;color:#eb6834;line-height:1.1}
+.card .un{font-size:12px;color:#8a8880;font-weight:400}
+.minis{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px}
+.mini{background:#f4f3ef;border-radius:8px;padding:.6rem .8rem}
+.mini .lb{font-size:11px;color:#6b6a65}
+.mini .vl{font-size:17px;font-weight:500}
+
+h2{font-size:15px;font-weight:500;margin:2rem 0 .8rem}
+h2 small{font-weight:400;color:#8a8880;font-size:12px;margin-left:6px}
+
+.wk{display:flex;align-items:center;gap:10px;margin-bottom:5px;cursor:pointer}
+.wk .rot{width:82px;flex:none;font-size:12px;color:#6b6a65}
+.wk .trk{flex:1;height:22px;border-radius:5px;background:#efeee9;overflow:hidden}
+.wk .trk i{display:block;height:100%;border-radius:5px}
+.wk .val{width:126px;flex:none;text-align:right;font-size:12px;color:#6b6a65}
+.wk:hover .trk i{opacity:.75}
+
+.meses{display:flex;align-items:flex-end;gap:6px;height:155px}
+.col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;cursor:pointer}
+.col .bar{border-radius:5px 5px 0 0;min-height:4px}
+.col:hover .bar{opacity:.75}
+.col .v,.col .l,.col .p{text-align:center;font-size:11px;color:#8a8880}
+.col .v{margin-bottom:3px}
+.col .l{margin-top:5px}
+.col .p{font-size:10px}
+.col.on .l{color:#1a1a19}
+
+.dim{margin-bottom:.9rem}
+.dim .t{font-size:12px;color:#8a8880;margin-bottom:4px}
+.faixa{display:flex;height:30px;border-radius:5px;overflow:hidden;gap:2px}
+.faixa div{display:flex;flex-direction:column;justify-content:center;padding:0 9px;
+color:#123;font-size:11px;line-height:1.15;overflow:hidden}
+.faixa span{white-space:nowrap}
+.faixa .q{font-weight:600}
+
+footer{margin-top:3.5rem;padding-top:1rem;border-top:1px solid #e4e2db;font-size:12px;color:#8a8880}
+@media(max-width:640px){.card .vl{font-size:22px}.wk .val{width:92px}.wk .rot{width:66px}}
 """
 
-RAMP = ["#E1F5EE", "#9FE1CB", "#5DCAA5", "#1D9E75", "#0F6E56"]
-COR_TURNO = ["#eda100", "#eb6834", "#4a3aa7"]
-NOME_TURNO = ["manhã", "tarde", "noite"]
+SCRIPT = """
+const MS=["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+const ML=["janeiro","fevereiro","março","abril","maio","junho","julho","agosto",
+          "setembro","outubro","novembro","dezembro"];
+const br=n=>Math.round(n).toLocaleString("pt-BR");
+const hm=m=>Math.floor(m/60)+"h"+String(Math.round(m%60)).padStart(2,"0");
+const fa=document.getElementById("fa"),fm=document.getElementById("fm"),fw=document.getElementById("fw");
+
+function anos(){return [...new Set(D.map(r=>r.a))].sort((x,y)=>y-x);}
+function meses(){const L=D.filter(r=>r.a==+fa.value);
+  return [...new Set(L.map(r=>r.m))].sort((x,y)=>x-y);}
+function semanasDe(){const L=D.filter(r=>r.a==+fa.value&&(!fm.value||r.m==+fm.value));
+  return [...new Set(L.map(r=>r.w))].sort((x,y)=>x-y);}
+
+function opts(el,lista,rotulo,vazio){
+  el.innerHTML='<option value="">'+vazio+'</option>'+
+    lista.map(v=>'<option value="'+v+'">'+rotulo(v)+'</option>').join("");
+}
+
+anos().forEach(a=>fa.insertAdjacentHTML("beforeend",'<option>'+a+'</option>'));
+fa.value=anos()[0];
+opts(fm,meses(),v=>ML[v-1],"ano inteiro");
+// O ano corrente abre no mês mais recente com pedal — a tela é sobre o agora.
+// Ano fechado abre inteiro: dezembro não tem nada de especial em retrospecto.
+const ANO_ATUAL=anos()[0];
+if(+fa.value===ANO_ATUAL)fm.value=String(Math.max(...meses()));
+opts(fw,semanasDe(),v=>"semana "+v,"todas as semanas");
+
+function render(){
+  [fm,fw].forEach(e=>e.parentElement.classList.toggle("on",!!e.value));
+  const A=+fa.value;
+  const L=D.filter(r=>r.a===A&&(!fm.value||r.m==+fm.value)&&(!fw.value||r.w==+fw.value));
+  document.getElementById("ctx").textContent=
+    fw.value?"semana "+fw.value+" · "+A : fm.value?ML[+fm.value-1]+" de "+A : A+" · ano inteiro";
+
+  const n=L.length,km=L.reduce((s,r)=>s+r.km,0),mi=L.reduce((s,r)=>s+r.t,0),
+        el=L.reduce((s,r)=>s+r.e,0);
+  const dias=[...new Set(L.map(r=>r.d))].sort();
+  let seq=dias.length?1:0,mx=seq;
+  for(let i=1;i<dias.length;i++){
+    seq=(new Date(dias[i])-new Date(dias[i-1]))/864e5===1?seq+1:1;
+    mx=Math.max(mx,seq);
+  }
+
+  document.getElementById("cards").innerHTML=[
+    ["🚴","Total Km",br(km),"km"],
+    ["⏱","Vel. Média",n?(L.reduce((s,r)=>s+r.v,0)/n).toFixed(1):"0","km/h"],
+    ["🚲","Pedais",n,""],
+    ["🕐","Horas",hm(mi),""],
+    ["⛰","Elevação",br(el),"m"]
+  ].map(c=>'<div class="card"><div class="ic">'+c[0]+'</div><div class="lb">'+c[1]+
+    '</div><div class="vl">'+c[2]+' <span class="un">'+c[3]+'</span></div></div>').join("");
+
+  document.getElementById("minis").innerHTML=[
+    ["maior pedal",n?Math.max(...L.map(r=>r.km)).toFixed(1)+" km":"—"],
+    ["maior subida",n?br(Math.max(...L.map(r=>r.e)))+" m":"—"],
+    ["média por pedal",n?(km/n).toFixed(1)+" km":"—"],
+    ["dias pedalados",dias.length],
+    ["sequência",mx+" dia"+(mx===1?"":"s")]
+  ].map(c=>'<div class="mini"><div class="lb">'+c[0]+'</div><div class="vl">'+c[1]+
+    '</div></div>').join("");
+
+  // Semanas do período — do mês escolhido, ou do ano inteiro.
+  const base=D.filter(r=>r.a===A&&(!fm.value||r.m==+fm.value));
+  const sm={};base.forEach(r=>{(sm[r.w]=sm[r.w]||{km:0,n:0}).km+=r.km;sm[r.w].n++;});
+  const ks=Object.keys(sm).sort((x,y)=>x-y);
+  const wmax=Math.max(...ks.map(s=>sm[s].km));
+  document.getElementById("hsem").innerHTML="Semanas"+
+    (fm.value?' <small>de '+ML[+fm.value-1]+'</small>':' <small>do ano</small>');
+  document.getElementById("sem").innerHTML=ks.length?ks.map(s=>{
+    const on=fw.value==s;
+    return '<div class="wk" data-w="'+s+'"><span class="rot"'+(on?' style="color:#1a1a19"':'')+
+      '>semana '+s+'</span><div class="trk"><i style="width:'+(100*sm[s].km/wmax)+
+      '%;background:'+(on?"#eb6834":sm[s].km===wmax?"#f0a58a":"#1baf7a")+'"></i></div>'+
+      '<span class="val">'+br(sm[s].km)+' km · '+sm[s].n+' pedais</span></div>';
+  }).join(""):'<div style="font-size:13px;color:#8a8880">sem pedal no período</div>';
+  document.querySelectorAll("[data-w]").forEach(e=>e.onclick=()=>{
+    fw.value=fw.value==e.dataset.w?"":e.dataset.w;render();});
+
+  // Meses — sempre o ano inteiro, senão a comparação perde sentido.
+  const ms={};D.filter(r=>r.a===A).forEach(r=>{(ms[r.m]=ms[r.m]||{km:0,n:0}).km+=r.km;ms[r.m].n++;});
+  const mmax=Math.max(...Object.values(ms).map(x=>x.km));
+  document.getElementById("mes").innerHTML=MS.map((nome,i)=>{
+    const x=ms[i+1],on=fm.value==""+(i+1);
+    if(!x)return '<div class="col" style="cursor:default">'+
+      '<div style="height:3px;background:#e4e2db;border-radius:2px"></div>'+
+      '<div class="l">'+nome+'</div></div>';
+    return '<div class="col'+(on?' on':'')+'" data-m="'+(i+1)+'">'+
+      '<div class="v">'+br(x.km)+'</div>'+
+      '<div class="bar" style="height:'+Math.round(100*x.km/mmax)+'%;background:'+
+      (on?"#eb6834":x.km===mmax?"#f0a58a":"#1baf7a")+'"></div>'+
+      '<div class="l">'+nome+'</div><div class="p">'+x.n+'p</div></div>';
+  }).join("");
+  document.querySelectorAll("[data-m]").forEach(c=>c.onclick=()=>{
+    fm.value=fm.value==c.dataset.m?"":c.dataset.m;
+    fw.value="";opts(fw,semanasDe(),v=>"semana "+v,"todas as semanas");render();});
+
+  const dims=[
+    ["piso","s",{estrada:"#B5D4F4",misto:"#eda100",trilha:"#eb6834"}],
+    ["porte","p",{curto:"#B5D4F4",medio:"#378ADD",longo:"#185FA5"}],
+    ["tipo","c",{rotina:"#B5D4F4",exploracao:"#1baf7a"}]
+  ];
+  document.getElementById("comp").innerHTML=dims.map(([nome,k,cores])=>{
+    const q={};L.forEach(r=>q[r[k]]=(q[r[k]]||0)+1);
+    const kk=Object.keys(cores).filter(x=>q[x]);
+    if(!kk.length)return"";
+    return '<div class="dim"><div class="t">'+nome+'</div><div class="faixa">'+
+      kk.map(x=>'<div title="'+x+': '+q[x]+'" style="width:'+(100*q[x]/n)+
+        '%;background:'+cores[x]+'"><span>'+x+'</span><span class="q">'+q[x]+
+        '</span></div>').join("")+'</div></div>';
+  }).join("");
+}
+
+fa.oninput=()=>{opts(fm,meses(),v=>ML[v-1],"ano inteiro");
+  fm.value=(+fa.value===ANO_ATUAL)?String(Math.max(...meses())):"";
+  fw.value="";
+  opts(fw,semanasDe(),v=>"semana "+v,"todas as semanas");render();};
+fm.oninput=()=>{fw.value="";opts(fw,semanasDe(),v=>"semana "+v,"todas as semanas");render();};
+fw.oninput=render;
+render();
+"""
 
 
-def num(v) -> str:
-    return f"{round(v):,}".replace(",", ".")
-
-
-def cor_semana(km) -> str:
-    if km is None:
-        return "#efeee9"
-    for limite, cor in zip((60, 110, 160, 210), RAMP):
-        if km < limite:
-            return cor
-    return RAMP[4]
-
-
-def navegacao(atual) -> str:
-    itens = ['<a href="index.html"%s>visão geral</a>'
-             % (' class="on"' if atual is None else "")]
-    for ano in sorted(FASES):
-        marca = ' class="on"' if ano == atual else ""
-        itens.append(f'<a href="ano_{ano}.html"{marca}>{ano}</a>')
+def navegacao(atual: str) -> str:
+    itens = []
+    for arquivo, rotulo in SECOES:
+        existe = (SAIDA / arquivo).exists() or arquivo == atual
+        classe = "on" if arquivo == atual else ("" if existe else "off")
+        alvo = arquivo if existe else "#"
+        itens.append(f'<a href="{alvo}" class="{classe}">{rotulo}</a>')
     return "<nav>" + "".join(itens) + "</nav>"
 
 
-SCRIPT_MES = """
-<script>
-const PEDAIS = %s, MESES = %s, CORES = %s;
-const alvo = document.getElementById('mes');
-let aberto = null;
-document.querySelectorAll('.bar').forEach(b => b.addEventListener('click', () => {
-  const m = b.dataset.mes;
-  document.querySelectorAll('.bar').forEach(o => o.classList.remove('sel'));
-  if (aberto === m) { aberto = null; alvo.innerHTML = ''; return; }
-  aberto = m; b.classList.add('sel');
-  const lista = PEDAIS[m] || [];
-  const km = lista.reduce((s, p) => s + p.k, 0);
-  let h = '<div class="mes"><h3>' + MESES[m - 1] + '</h3><p>' +
-    lista.length + (lista.length > 1 ? ' pedais' : ' pedal') + ' · ' +
-    Math.round(km).toLocaleString('pt-BR') + ' km</p>';
-  lista.forEach(p => {
-    h += '<div class="row"><time>' + p.d + '</time><em>' + p.n + '</em>' +
-      '<span class="tag" style="background:' + (CORES[p.t] || '#e4e2db') + '33">' +
-      p.t + '</span><b>' + p.k.toFixed(1) + '</b><u>km</u>' +
-      '<i>' + p.e.toLocaleString('pt-BR') + ' m</i>' +
-      '<i>' + p.v.toFixed(1) + ' km/h</i></div>';
-  });
-  alvo.innerHTML = h + '</div>';
-}));
-</script>"""
+def ler(con) -> list:
+    """Um registro por pedal, com nomes curtos para o JSON não inflar."""
+    linhas = con.execute("""
+        SELECT data::DATE::VARCHAR      AS d,
+               ano                      AS a,
+               month(data)              AS m,
+               week(data)               AS w,
+               nome                     AS n,
+               round(distancia_km, 1)   AS km,
+               round(tempo_movimento_s / 60) AS t,
+               round(velocidade_media_kmh, 1) AS v,
+               ganho_elevacao_m         AS e,
+               coalesce(tipo, 'rotina') AS c,
+               coalesce(porte, 'curto') AS p,
+               coalesce(piso, 'estrada') AS s
+        FROM vw_pedais ORDER BY data
+    """).fetchall()
+
+    return [
+        {"d": d, "a": int(a), "m": int(m), "w": int(w), "n": (n or "").strip(),
+         "km": float(km), "t": int(t), "v": float(v), "e": int(e or 0),
+         "c": c, "p": p, "s": s}
+        for d, a, m, w, n, km, t, v, e, c, p, s in linhas
+    ]
 
 
-def pagina(titulo: str, atual, corpo: str) -> str:
+def inicio(dados: list) -> str:
     return f"""<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{titulo} · conatusride</title><style>{CSS}</style></head>
-<body><div class="wrap">{navegacao(atual)}{corpo}
-<footer>conatusride · gerado a partir do histórico do Strava</footer>
-</div></body></html>"""
-
-
-def pagina_ano(ano: int, d) -> str:
-    script = SCRIPT_MES % (
-        json.dumps(d["todos"].get(ano, {}), ensure_ascii=False),
-        json.dumps(MESES, ensure_ascii=False),
-        json.dumps(COR_TIPO, ensure_ascii=False),
-    )
-    return pagina(str(ano), ano, montar_ano(ano, d) + script)
-
-
-def faixa_semanas(semanas: dict, rotulo: str = "semanas") -> str:
-    celulas = []
-    for s in range(1, 53):
-        km = semanas.get(s)
-        dica = f"Semana {s}: {num(km)} km" if km else f"Semana {s}: sem pedal"
-        celulas.append(
-            f'<s title="{dica}" style="background:{cor_semana(km)}"></s>'
-        )
-    return f'<div class="wk"><b>{rotulo}</b><div>{"".join(celulas)}</div></div>'
-
-
-def barra_meta(km: float, meta) -> str:
-    if not meta:
-        return ""
-    pct = round(100 * km / meta)
-    return (
-        f'<div class="meta"><b>meta {num(meta)}</b>'
-        f'<div class="track"><i style="width:{min(100, pct)}%"></i></div>'
-        f'<u>{pct}%</u></div>'
-    )
-
-
-def barra_turno(turnos) -> str:
-    total = sum(turnos)
-    if not total:
-        return ""
-    fatias = "".join(
-        f'<div title="{NOME_TURNO[i]}: {n}" '
-        f'style="width:{100 * n / total}%;background:{COR_TURNO[i]}"></div>'
-        for i, n in enumerate(turnos) if n
-    )
-    return (
-        f'<div class="meta"><b>turno</b><div class="turno">{fatias}</div>'
-        f'<u>{round(100 * turnos[2] / total)}%</u></div>'
-    )
-
-
-def legenda_turno() -> str:
-    itens = "".join(
-        f'<span><i class="sw" style="background:{COR_TURNO[i]}"></i>{n}</span>'
-        for i, n in enumerate(NOME_TURNO)
-    )
-    return f'<div class="leg">{itens}<span>% = pedais noturnos</span></div>'
-
-
-# ---------------------------------------------------------------- consultas
-
-
-def ler(con):
-    dados = {}
-
-    dados["totais"] = con.execute("""
-        SELECT count(*) pedais, sum(distancia_km) km,
-               sum(ganho_elevacao_m) elev, sum(tempo_movimento_s)/3600 horas
-        FROM pedais
-    """).fetchone()
-
-    # tracos.py pode não ter rodado ainda; o site funciona sem as cidades.
-    try:
-        dados["cidades_total"] = con.execute(
-            "SELECT count(DISTINCT cidade || uf), count(DISTINCT uf) FROM cidades"
-        ).fetchone()
-    except duckdb.Error:
-        dados["cidades_total"] = (0, 0)
-
-    dados["anos"] = con.execute("""
-        SELECT p.ano, count(*) pedais, sum(p.distancia_km) km,
-               sum(p.ganho_elevacao_m) elev, sum(p.tempo_movimento_s)/3600 horas,
-               avg(p.velocidade_media_kmh) vel,
-               count(DISTINCT week(p.data)) semanas, max(m.meta_km) meta,
-               sum((hour(p.data) < 12)::INT) manha,
-               sum((hour(p.data) BETWEEN 12 AND 18)::INT) tarde,
-               sum((hour(p.data) > 18)::INT) noite
-        FROM pedais p LEFT JOIN metas_ano m USING (ano)
-        GROUP BY 1 ORDER BY 1
-    """).df().to_dict("records")
-
-    semanas = {}
-    for ano, semana, km in con.execute("""
-        SELECT ano, week(data), sum(distancia_km) FROM pedais GROUP BY 1, 2
-    """).fetchall():
-        semanas.setdefault(int(ano), {})[int(semana)] = float(km)
-    dados["semanas"] = semanas
-
-    meses = {}
-    for ano, mes, pedais, km in con.execute("""
-        SELECT ano, month(data), count(*), sum(distancia_km)
-        FROM pedais GROUP BY 1, 2 ORDER BY 1, 2
-    """).fetchall():
-        meses.setdefault(int(ano), []).append((int(mes), int(pedais), float(km)))
-    dados["meses"] = meses
-
-    marcantes = {}
-    # strftime devolveria o mês em inglês; monta a data com os nomes daqui.
-    for ano, dia, mes, nome, km, elev, vel, arquivo in con.execute("""
-        SELECT ano, day(data), month(data), nome,
-               distancia_km, ganho_elevacao_m, velocidade_media_kmh, arquivo
-        FROM (SELECT *, row_number() OVER
-                (PARTITION BY ano ORDER BY distancia_km DESC) AS r FROM pedais)
-        WHERE r <= 5 ORDER BY ano, r
-    """).fetchall():
-        quando = f"{int(dia)} {MESES[int(mes) - 1]}"
-        marcantes.setdefault(int(ano), []).append(
-            (quando, nome, km, elev, vel, arquivo)
-        )
-    dados["marcantes"] = marcantes
-
-    # Todos os pedais, para a lista que abre ao clicar num mês. São ~960
-    # registros, uns 60 KB de JSON — cabe embutido em cada página.
-    todos = {}
-    for ano, mes, dia, nome, km, elev, vel, tipo in con.execute("""
-        SELECT ano, month(data), day(data), nome, distancia_km,
-               ganho_elevacao_m, velocidade_media_kmh,
-               coalesce(tipo, '') AS tipo
-        FROM vw_pedais ORDER BY data
-    """).fetchall():
-        todos.setdefault(int(ano), {}).setdefault(int(mes), []).append({
-            "d": int(dia),
-            "n": (nome or "").strip(),
-            "k": round(float(km), 1),
-            "e": int(elev or 0),
-            "v": round(float(vel), 1),
-            "t": tipo,
-        })
-    dados["todos"] = todos
-
-    tipos = {}
-    listas = {}
-    try:
-        for ano, tipo, n in con.execute("""
-            SELECT ano, tipo, count(*) FROM vw_pedais GROUP BY 1, 2
-        """).fetchall():
-            tipos.setdefault(int(ano), {})[tipo] = int(n)
-
-        # Só os tipos que valem detalhar: os raros e memoráveis. Os pedais
-        # curtos e médios são centenas e já aparecem nos agregados.
-        for ano, tipo, dia, mes, nome, km, elev, vel, arq in con.execute("""
-            SELECT ano, tipo, day(data), month(data), nome, distancia_km,
-                   ganho_elevacao_m, velocidade_media_kmh, arquivo
-            FROM (SELECT *, row_number() OVER (PARTITION BY ano, tipo
-                    ORDER BY distancia_km DESC) AS r FROM vw_pedais)
-            WHERE r <= 6 AND tipo IN ('evento', 'exploracao', 'pedal_longo')
-            ORDER BY ano, tipo, distancia_km DESC
-        """).fetchall():
-            listas.setdefault(int(ano), {}).setdefault(tipo, []).append(
-                (f"{int(dia)} {MESES[int(mes) - 1]}", nome, km, elev, vel, arq)
-            )
-    except duckdb.Error:
-        pass
-    dados["tipos"] = tipos
-    dados["listas"] = listas
-
-    cidades = {}
-    percursos = {}
-    try:
-        for ano, cidade, uf, n in con.execute("""
-            SELECT p.ano, c.cidade, c.uf, count(DISTINCT c.arquivo)
-            FROM cidades c JOIN pedais p USING (arquivo)
-            GROUP BY 1, 2, 3 ORDER BY 1, 4 DESC
-        """).fetchall():
-            cidades.setdefault(int(ano), []).append((cidade, uf, int(n)))
-
-        # Percurso de cada pedal, na ordem real de passagem: `entrada` é o
-        # índice do primeiro ponto dentro de cada cidade.
-        for arquivo, percurso in con.execute("""
-            SELECT arquivo, string_agg(cidade, ' → ' ORDER BY entrada)
-            FROM cidades GROUP BY 1
-        """).fetchall():
-            percursos[arquivo] = percurso
-    except duckdb.Error:
-        pass
-    dados["cidades"] = cidades
-    dados["percursos"] = percursos
-
-    return dados
-
-
-# ---------------------------------------------------------------- páginas
-
-
-def montar_indice(d) -> str:
-    pedais, km, elev, horas = d["totais"]
-    n_cidades, n_uf = d["cidades_total"]
-
-    partes = [
-        '<h1>conatusride</h1>',
-        f'<p class="sub">Meu histórico de pedais, de 2021 a 2026</p>',
-        '<div class="nums">',
-        f'<div><div class="n hero">{num(km)}</div>'
-        f'<div class="nl">quilômetros</div></div>',
-        f'<div><div class="n big">{num(pedais)}</div>'
-        f'<div class="nl">pedais</div></div>',
-        f'<div><div class="n big">{num(elev)}</div>'
-        f'<div class="nl">metros de subida</div></div>',
-        f'<div><div class="n big">{num(horas)}</div>'
-        f'<div class="nl">horas</div></div>',
-        f'<div><div class="n big">{n_cidades}</div>'
-        f'<div class="nl">cidades · {n_uf} estados</div></div>',
-        "</div>",
-        "<h2>Os anos</h2>",
-    ]
-
-    maior = max(a["km"] for a in d["anos"])
-    for a in d["anos"]:
-        ano = int(a["ano"])
-        fase = FASES.get(ano, {"nome": ""})
-        destaque = ' style="background:#eb6834"' if a["km"] == maior else ""
-        largura = round(100 * a["km"] / maior)
-        partes.append(
-            f'<div class="yr"><a href="ano_{ano}.html">{ano}'
-            f'<small>{fase["nome"]}</small></a>'
-            f'<div class="track" style="height:22px;border-radius:4px">'
-            f'<i style="width:{largura}%;border-radius:4px"{destaque}></i></div>'
-            f'<u style="font-size:13px;color:#52514e;width:64px;'
-            f'text-align:right;text-decoration:none">{num(a["km"])} km</u></div>'
-        )
-
-    partes.append('<div class="head"><h2>Semana a semana</h2>'
-                  '<span>mais escuro, mais quilômetros</span></div>')
-    for a in d["anos"]:
-        ano = int(a["ano"])
-        partes.append(faixa_semanas(d["semanas"].get(ano, {}), str(ano)))
-
-    return "".join(partes)
-
-
-ORDEM_TIPOS = ["pedal_curto", "pedal_medio", "pedal_longo",
-               "treino", "evento", "exploracao"]
-
-COR_TIPO = {"pedal_curto": "#B5D4F4", "pedal_medio": "#378ADD",
-            "pedal_longo": "#185FA5", "treino": "#1baf7a",
-            "evento": "#eb6834", "exploracao": "#eda100"}
-
-LEGENDA_TIPO = {
-    "evento": "trilhas e eventos festivos no interior",
-    "exploracao": "férias no interior, rota nova",
-    "pedal_longo": "os mais longos de Fortaleza e região",
-}
-
-
-def bloco_tipos(ano: int, d) -> str:
-    conta = d["tipos"].get(ano, {})
-    if not conta:
-        return ""
-
-    total = sum(conta.values())
-    fatias, legenda = [], []
-    for tipo in ORDEM_TIPOS:
-        n = conta.get(tipo)
-        if not n:
-            continue
-        cor = COR_TIPO[tipo]
-        fatias.append(
-            f'<div title="{tipo}: {n}" '
-            f'style="width:{100 * n / total}%;background:{cor}"></div>'
-        )
-        legenda.append(
-            f'<span><i class="sw" style="background:{cor}"></i>{tipo} {n}</span>'
-        )
-
-    partes = [
-        "<h2>Tipos de pedal</h2>",
-        f'<div class="turno" style="height:26px;border-radius:4px">'
-        f'{"".join(fatias)}</div>',
-        f'<div class="leg">{"".join(legenda)}</div>',
-    ]
-
-    for tipo in ("evento", "exploracao", "pedal_longo"):
-        linhas = d["listas"].get(ano, {}).get(tipo, [])
-        if not linhas:
-            continue
-        partes.append(
-            f'<div class="grp"><i class="sw" style="background:{COR_TIPO[tipo]}">'
-            f'</i><b>{tipo}</b><small>{LEGENDA_TIPO[tipo]}</small></div>'
-        )
-        for quando, nome, km, elev, vel, arquivo in linhas:
-            partes.append(
-                f'<div class="row"><time>{quando}</time><em>{nome.strip()}</em>'
-                f'<b>{km:.1f}</b><u>km</u>'
-                f'<i>{num(elev or 0)} m</i><i>{vel:.1f} km/h</i></div>'
-            )
-            percurso = d["percursos"].get(arquivo)
-            if percurso:
-                partes.append(f'<div class="pct">{percurso}</div>')
-
-    return "".join(partes)
-
-
-def montar_ano(ano: int, d) -> str:
-    a = next(x for x in d["anos"] if int(x["ano"]) == ano)
-    fase = FASES.get(ano, {"nome": "", "frase": "", "texto": ""})
-    maior_km = max(x["km"] for x in d["anos"])
-    recorde = " · recorde" if a["km"] == maior_km else ""
-
-    partes = [
-        f'<div class="eyebrow" style="color:#eb6834">'
-        f'{fase["nome"].upper()}</div>',
-        f'<p class="frase">{fase["frase"]}</p>',
-        f'<p class="texto">{fase["texto"]}</p>',
-        '<div class="nums">',
-        f'<div><div class="n hero">{num(a["km"])}</div>'
-        f'<div class="nl">quilômetros{recorde}</div></div>',
-        f'<div><div class="n big">{num(a["elev"])}</div>'
-        f'<div class="nl">metros de subida</div></div>',
-        f'<div><div class="n big">{int(a["pedais"])}</div>'
-        f'<div class="nl">pedais</div></div>',
-        f'<div><div class="n big">{num(a["horas"])}</div>'
-        f'<div class="nl">horas</div></div>',
-        f'<div><div class="n big">{int(a["semanas"])}'
-        f'<span style="font-size:17px;color:#8a8880">/52</span></div>'
-        f'<div class="nl">semanas com pedal</div></div>',
-        "</div>",
-    ]
-
-    meses = d["meses"].get(ano, [])
-    if meses:
-        pico = max(m[2] for m in meses)
-        barras = []
-        for mes, pedais, km in meses:
-            classe = "bar top" if km == pico else "bar"
-            barras.append(
-                f'<div class="{classe}" data-mes="{mes}" title="{MESES[mes - 1]}: '
-                f'{num(km)} km em {pedais} pedais">'
-                f'<div class="bv">{num(km)}</div>'
-                f'<i style="height:{round(100 * km / pico)}%"></i>'
-                f'<div class="bl">{MESES[mes - 1]}</div></div>'
-            )
-        partes.append('<div class="head"><h2>Ao longo do ano</h2>'
-                      '<span>clique num mês para ver os pedais</span></div>')
-        partes.append(f'<div class="bars">{"".join(barras)}</div>')
-        partes.append('<div id="mes"></div>')
-
-    partes.append(faixa_semanas(d["semanas"].get(ano, {})))
-    partes.append(barra_meta(a["km"], a["meta"]))
-    partes.append(barra_turno([int(a["manha"]), int(a["tarde"]), int(a["noite"])]))
-    partes.append(legenda_turno())
-
-    partes.append(bloco_tipos(ano, d))
-
-    cidades = d["cidades"].get(ano, [])
-    if cidades:
-        # Sem corte: as cidades visitadas uma única vez é que contam história.
-        # As habituais o ciclista já sabe de cor.
-        pilulas = "".join(
-            f'<span>{c} <b>{n}</b></span>' for c, uf, n in cidades
-        )
-        partes.append(
-            f'<h2>Cidades do ano</h2><p class="texto" style="margin-bottom:.75rem">'
-            f'{len(cidades)} cidades atravessadas · o número é em quantos pedais</p>'
-            f'<div class="cid">{pilulas}</div>'
-        )
-
-    return "".join(partes)
+<title>conatusride</title><style>{CSS}</style></head>
+<body><div class="wrap">
+{navegacao("index.html")}
+<div class="filtros">
+<span class="sel"><select id="fa"></select></span>
+<span class="sel"><select id="fm"></select></span>
+<span class="sel"><select id="fw"></select></span>
+<span class="ctx" id="ctx"></span>
+</div>
+<div class="cards" id="cards"></div>
+<div class="minis" id="minis"></div>
+<h2 id="hsem">Semanas</h2>
+<div id="sem"></div>
+<h2>Meses <small>clique para filtrar</small></h2>
+<div class="meses" id="mes"></div>
+<h2>Composição</h2>
+<div id="comp"></div>
+<footer>conatusride · {len(dados)} pedais · gerado do histórico do Strava</footer>
+</div>
+<script>const D={json.dumps(dados, ensure_ascii=False, separators=(",", ":"))};
+{SCRIPT}</script>
+</body></html>"""
 
 
 def main() -> None:
     if not BANCO.exists():
-        raise FileNotFoundError(f"Não encontrei {BANCO}.")
+        raise FileNotFoundError(f"Não encontrei {BANCO}. Rode src/importar.py.")
 
     SAIDA.mkdir(parents=True, exist_ok=True)
 
     with duckdb.connect(str(BANCO), read_only=True) as con:
-        d = ler(con)
+        dados = ler(con)
 
-    (SAIDA / "index.html").write_text(
-        pagina("visão geral", None, montar_indice(d)), encoding="utf-8"
-    )
-    print(f"docs/site/index.html")
+    destino = SAIDA / "index.html"
+    destino.write_text(inicio(dados), encoding="utf-8")
 
-    for a in d["anos"]:
-        ano = int(a["ano"])
-        (SAIDA / f"ano_{ano}.html").write_text(
-            pagina_ano(ano, d), encoding="utf-8"
-        )
-        print(f"docs/site/ano_{ano}.html")
-
-    print(f"\npronto — abra {SAIDA / 'index.html'} no navegador")
+    tamanho = destino.stat().st_size / 1024
+    print(f"{len(dados)} pedais · {tamanho:.0f} KB")
+    print(f"pronto — abra {destino}")
 
 
 if __name__ == "__main__":
