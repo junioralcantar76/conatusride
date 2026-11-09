@@ -1,224 +1,102 @@
-# Painel — escopo
+# Painel
 
-Definido em conjunto, agosto de 2026. Substitui a estrutura anterior de páginas
-narrativas (uma por ano, com fase e frase em destaque).
+Seis telas, todas construídas. Os dados vão embutidos em cada página: navegador
+aberto em `file://` bloqueia leitura de JSON local, e assim cada tela funciona
+sozinha, inclusive copiada para o celular, sem internet.
 
-## Por que mudou
+Gerado por `src/gerar_site.py` em `docs/site/`.
 
-As primeiras páginas foram construídas como **narrativa**: pouca informação por
-tela, texto grande, uma história contada em ordem. Ficaram bonitas e não eram o
-que eu uso.
+## Por que é assim
 
-O que eu quero é **instrumento**: filtrar, cruzar, comparar, consultar. Densidade
-de informação e comparação lado a lado, como no BI que eu mantinha antes.
+As primeiras páginas foram feitas como **narrativa**: pouca informação por tela,
+texto grande, história contada em ordem. Ficaram claras e não eram o que se usa
+no dia a dia.
 
-Os dois podem coexistir, mas o instrumento vem primeiro — é o que se usa no dia
-a dia. O texto das fases entra depois, como camada de contexto sobre os números.
+O que faz falta é **instrumento**: filtrar, cruzar, comparar, consultar. É o que
+o BI anterior fazia e o que se usa de verdade.
 
-## Os seis blocos
+O texto das fases continua no projeto, como camada de contexto sobre os números
+— não mais como estrutura da página.
 
-### 1. Visão geral do ano
+## As telas
 
-Dez indicadores:
+### início — `index.html`
 
-- Km pedalados
-- Número de atividades
-- Horas sobre a bike
-- Elevação acumulada
-- Velocidade média
-- Maior pedalada
-- Maior ganho de elevação
-- Média de km por atividade
-- Dias pedalados (distinto de atividades: dois pedais no mesmo dia contam 1 dia)
-- Sequência de pedaladas
+O ano corrente. Filtros de ano, mês e semana; dez indicadores (km, velocidade
+média, pedais, horas, elevação, maior pedal, maior subida, média por pedal,
+dias pedalados, sequência); barras de semana; gráfico mensal clicável;
+composição por piso, porte e tipo.
 
-Os mesmos indicadores devem responder ao recorte escolhido — ano, mês ou semana.
+Abre no mês mais recente com pedal. Ano fechado abre inteiro — dezembro não tem
+nada de especial em retrospecto.
 
-### 2. Evolução mensal
+### mês — `mes.html`
 
-Tabela, não gráfico:
+Detalhe de um mês. Recebe o mês pela URL (`?a=2026&m=8`) — um arquivo por mês
+seriam uns 60 para o mesmo resultado.
 
-| Mês | Km | Pedais | Horas | Elevação |
-|---|---|---|---|---|
-| Janeiro | 320 km | 8 | 14h | 3.200 m |
+Traz "Por onde andei": uma linha por cidade, com as datas de cada passagem e
+marca de primeira vez. Depois a composição e a lista de pedais com a rota.
 
-### 3. Histórico completo
+### histórico — `historico.html`
 
-Uma linha por atividade, com todos os campos: data, distância, tempo,
-velocidade, elevação, frequência cardíaca, potência, localização, nome.
+Todos os pedais com filtros combináveis: ano, mês, piso, porte, tipo, busca por
+nome, distância mínima. Tabela ordenável. A rota abre ao clicar na linha.
 
-Filtros combináveis. Exemplos:
+Abre no ano corrente.
 
-- 2026 → agosto → acima de 50 km
-- todas as pedaladas acima de 100 km
+### recordes — `recordes.html`
 
-### 4. Recordes pessoais
+Quatro cartões para o recorde de um pedal só (distância, velocidade média,
+elevação, tempo) e seis linhas para os de período (semana, mês, ano, sequência
+de dias).
 
-Calculados automaticamente:
+Tudo calculado na hora: um recorde escrito à mão envelheceria no primeiro pedal
+novo.
 
-- Maior distância
-- Maior velocidade média
-- Maior elevação
-- Maior tempo pedalando
-- Maior distância em um mês
-- Maior distância em um ano
-- Maior número de atividades
-- Melhor sequência de dias
-- Pedal mais longo de todos os tempos
+### anos — `anos.html`
 
-### 5. Comparação entre anos
+Tabela comparativa com variação sobre o ano anterior, seletor de medida e
+gráfico mês a mês com uma cor por ano. Caixa "até o mês atual" para comparar no
+mesmo ponto.
 
-Deve responder: estou pedalando mais este ano? Qual foi meu melhor ano? Em qual
-mês normalmente pedalo mais? Minha distância média está aumentando?
+### mapa — `mapa.html`
 
-### 6. Mapa da história
+Brasil em SVG, três níveis: estados → municípios → cidade. Sem biblioteca de
+mapa e sem camada de imagem, para continuar funcionando offline.
 
-Todas as rotas já feitas, com seleção por ano ou todos os anos. Visualizar
-literalmente onde já pedalei.
+Precisa de `data/contornos.json`, gerado uma vez por `src/contornos.py`.
 
-## Ordem de construção
+## Ordem dos scripts
 
-1. **Histórico filtrável** — é a fundação. Com os dados no navegador e os
-   filtros funcionando, os demais blocos são consultas sobre a mesma base.
-2. Visão do ano — os dez indicadores, respondendo ao filtro
-3. Evolução mensal
-4. Recordes
-5. Comparação entre anos
-6. Mapa — por último, é o mais pesado
+```
+importar.py        exportação do Strava -> tabela pedais
+pontos_partida.py  coordenada inicial de cada traçado
+tracos.py          pontos por minuto + cidades atravessadas (~15 min)
+metas.py           metas anuais
+classificar.py     tipo, porte, piso
+contornos.py       malha do IBGE -> contornos.json  (só quando mudar de estado)
+gerar_site.py      as seis telas
+```
 
-## Consequência técnica
-
-Filtro combinável exige os dados **no navegador**, não apenas o resultado
-pré-calculado. Os 961 pedais vão embutidos no HTML e a página recalcula na hora.
-São cerca de 60 KB — irrelevante.
-
-Isso muda a arquitetura anterior, em que cada página trazia números já somados.
+Depois de uma exportação nova, apagar `data/raw/` antes de extrair — senão os
+arquivos antigos ficam misturados e os scripts os processam à toa.
 
 ## Ressalvas conhecidas
 
-- **Modalidade** é uma só — o Strava classificou as 961 atividades como
-  "Pedalada", sem distinção. O que faz sentido no lugar é classificar o **piso**:
-  estrada, trilha ou misto. Ver abaixo.
-- **Frequência cardíaca** existe em apenas 6 pedais: o Strava gravou zero onde
-  não havia sensor. Pretendo voltar a usar a cinta, então os campos ficam no
-  painel e passam a ter valor nos pedais novos. Os antigos seguem nulos.
-- **Potência fica fora do painel.** Os watts estimados continuam na base (956
-  pedais), mas não são exibidos. São cálculo do Strava a partir de peso e
-  elevação, não medição. Nota: medidor de cadência não resolve isso — cadência
-  é rotação por minuto, potência exige medidor de potência, outro equipamento.
-  Para acompanhar esforço, a cinta cardíaca informa mais.
-- **Sequência** ainda não está definida — dias seguidos ou semanas seguidas com
-  pelo menos um pedal. A segunda é mais fiel ao padrão real, já que raramente
-  pedalo dois dias seguidos.
+- **Modalidade** é uma só: o Strava classificou tudo como "Pedalada". O que faz
+  sentido no lugar é o piso — estrada, misto, trilha —, marcado pelo nome.
+- **Frequência cardíaca** existe em 6 pedais; o Strava gravou zero onde não
+  havia sensor. Os campos ficam, e passam a valer quando a cinta voltar.
+- **Potência fica fora.** Os watts estimados continuam na base mas não são
+  exibidos: são cálculo do Strava a partir de peso e elevação, não medição.
+  Medidor de cadência não resolve — cadência é rotação por minuto.
+- **Elevação acima de 30 m/km é descartada** (decisão 23): três pedais em 974
+  tinham erro de altímetro.
 
-## Piso: estrada, trilha ou misto — a implementar
+## A fazer
 
-O dado já existe: a coluna `distancia_terra_m` do Strava, presente em 881 dos
-961 pedais.
-
-Cuidado conhecido: há um piso de 13 a 15% de "terra" em quase tudo, inclusive em
-pedal urbano — é ciclovia e via não pavimentada da cidade sendo classificada
-assim. O número absoluto não vale; o contraste sim.
-
-Faixas de partida, a calibrar contra pedais conhecidos:
-
-| Piso | % de terra |
-|---|---|
-| estrada | até ~15% |
-| misto | 15 a 50% |
-| trilha | acima de ~50% |
-
-Referências reais: Trilha Trairi 50%, Ceará–Paraíba 41%, Jurema–Baixio 36%,
-Triunfo 29%, treinos urbanos e Casa Caiada 13 a 15%.
-
-## Página inicial
-
-Aprovada em protótipo, e mantida: ano corrente, km do ano em destaque, quatro
-números de apoio, gráfico mensal com o mês atual destacado e os meses futuros
-apagados. Clicar num mês abre o detalhe.
-
-Meta, turno, tipos e cidades saíram dela — vão para as páginas específicas.
-
-## Estado em 19/08
-
-### Telas aprovadas
-
-**Inicial** — abre no mês corrente, não no ano inteiro. De cima para baixo:
-
-1. Filtros de ano, mês e semana (o mês vem preenchido com o atual)
-2. Cinco cards grandes com ícone e número em laranja: total km, velocidade
-   média, pedais, horas, elevação
-3. Cinco indicadores menores: maior pedal, maior subida, média por pedal, dias
-   pedalados, sequência
-4. **Semanas** do mês selecionado, em barras horizontais, comparadas entre si.
-   Clicáveis. Ao filtrar uma semana ela é destacada, não isolada — a comparação
-   com as outras é o ponto.
-5. **Meses** do ano, em barras verticais, sempre o ano inteiro para a
-   comparação continuar válida. Clicáveis.
-6. **Composição** em faixas coloridas com rótulo e contagem dentro: piso, porte
-   e tipo.
-
-**Detalhe do mês** — resumo em seis indicadores; tabela "Por onde andei" com
-cidade, UF, quantas vezes e as datas de cada passagem, marcando as estreias;
-composição; e a lista de pedais com a rota de cada um.
-
-**Histórico filtrável** — funciona, mas ficou seco esteticamente e não é a tela
-do dia a dia. Em espera.
-
-### Navegação
-
-Menu no topo com as seções, mais navegação por clique para aprofundar: clicar
-num mês na inicial abre o detalhe daquele mês.
-
-O detalhe do mês é **uma tela só** que recebe o mês escolhido, não um arquivo
-por mês — seriam uns 60 arquivos para o mesmo resultado.
-
-### A fazer
-
-Protótipos de recordes, comparação entre anos e mapa. Depois, o gerador.
-
-`src/gerar_site.py` continua obsoleto e será reescrito, não consertado.
-
-## Estado em 18/08
-
-**Classificação fechada e aplicada** — três dimensões: porte (40/75), piso
-(estrada, misto, trilha) e tipo (exploração ou rotina). Ver decisões 19 a 22.
-
-**Protótipo do ano aprovado** — 2026 com os dez indicadores, evolução mensal em
-gráfico e tabela, e a composição nas três dimensões. Março foi o mês recorde
-(411 km); maior sequência do ano, 3 dias em julho.
-
-**A fazer** — construir o painel de verdade, começando pelo histórico filtrável.
-`src/gerar_site.py` está obsoleto: usa os tipos antigos (`pedal_curto`,
-`evento`, `viagem`) e vai quebrar. Como as páginas narrativas foram substituídas
-pelo escopo novo, o gerador será reescrito, não consertado.
-
-**Ajuste pendente** — no histórico filtrável, mostrar o tempo como `4h41` em vez
-de minutos.
-
-## Estado anterior — 17/08
-
-**Feito** — protótipo da página inicial (ano corrente) aprovado; protótipo do
-histórico filtrável aprovado; classificação em três campos aplicada.
-
-**A fazer** — `src/gerar_site.py` ainda usa os tipos antigos (`pedal_curto`,
-`pedal_medio`, `pedal_longo`) e vai quebrar com a classificação nova. Precisa
-ser atualizado antes de gerar o site.
-
-**Ajuste pedido** — no histórico, mostrar o tempo como `4h41` em vez de minutos.
-
-**A definir juntos** — quais campos de classificação ficam. Foram acrescentados
-mais campos e regras do que o combinado. Ver decisão 19.
-
-## Em aberto
-
-- Comparação de anos na página inicial: entra ou fica só no bloco 5? Comparar km
-  ou elevação? Agosto de 2026 tem 278 km e 2.376 m — fraco em distância, o mais
-  duro do ano em terreno.
-- Onde entram as fases e o texto de contexto.
-- Recorte de semana: navegar a partir da atual ou escolher numa lista.
-
-## Registro
-
-Esta é uma construção. Se algo não funcionar, muda — e o histórico das decisões
-fica aqui.
+- Aprimorar a tela de recordes.
+- Rotas desenhadas no mapa, além das cidades. Os 106 mil pontos por minuto já
+  existem em `tracos`.
+- v2: a API do Strava para os pedais novos, em vez de reexportar tudo.

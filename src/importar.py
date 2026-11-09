@@ -25,6 +25,16 @@ BANCO = RAIZ / "data" / "conatusride.duckdb"
 
 ANO_INICIAL = 2021
 
+# Acima disto, a elevação é erro de altímetro e vira nulo. O altímetro
+# barométrico descalibra e inventa centenas de metros: "Lago - BR116"
+# (11/12/2023) registrou 2.902 m em 29 km — 100 m/km. Os outros dois pedais na
+# mesma rota, com a mesma distância, deram 98 e 156 m.
+#
+# O corte é folgado de propósito: o pedal mais íngreme legítimo é a Trilha da
+# Banana em Baturité, com 16 m/km. 30 dá o dobro de margem, cabe um evento de
+# montanha futuro e ainda fica muito longe do erro.
+MAX_M_POR_KM = 30
+
 # ---------------------------------------------------------------- colunas
 # origem -> destino. Sufixo indica a unidade.
 
@@ -141,6 +151,18 @@ def normalizar(bruto: pd.DataFrame) -> pd.DataFrame:
 
     for coluna in ZERO_E_NULO:
         df.loc[df[coluna] == 0, coluna] = pd.NA
+
+    # Elevação implausível vira nulo, não um valor estimado: sem outra medida
+    # do mesmo trajeto não há como saber o número certo, e inventar seria pior
+    # do que assumir a falta. O pedal continua na base com distância e tempo.
+    km = df["distancia_m"] / 1000
+    absurdo = km.gt(1) & df["ganho_elevacao_m"].gt(km * MAX_M_POR_KM)
+    if absurdo.any():
+        for _, linha in df[absurdo].iterrows():
+            print(f"  elevação implausível: {linha['nome']} — "
+                  f"{linha['ganho_elevacao_m']:.0f} m em "
+                  f"{linha['distancia_m'] / 1000:.1f} km, descartada")
+        df.loc[absurdo, "ganho_elevacao_m"] = pd.NA
 
     # Derivadas de conveniência: km/h e km poupam conversão em toda consulta.
     df["distancia_km"] = df["distancia_m"] / 1000

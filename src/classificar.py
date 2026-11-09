@@ -130,6 +130,11 @@ E_MISTO = {
     "2026-08-04",  # Jurema - Baixio
     "2026-08-06",  # Bom Jesus - Cachoeira dos Índios - Br116
     "2026-08-08",  # Triunfo Pb
+    "2026-10-25",  # Tapuio - Telha - Camará
+    "2026-10-31",  # Juatama - Quixada
+    "2025-09-28",  # Camará
+    "2025-11-08",  # Redenção - Paracupeba
+    "2025-10-04",  # Ilha Bela - Guaíba
 }
 
 
