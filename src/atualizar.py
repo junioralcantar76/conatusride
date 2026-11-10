@@ -105,6 +105,10 @@ def pedir(caminho: str, token: str, **params):
 # ---------------------------------------------------------------- busca
 
 
+def ids_na_base(con) -> set:
+    return {linha[0] for linha in con.execute("SELECT id FROM pedais").fetchall()}
+
+
 def ultima_data(con) -> int:
     """Timestamp do último pedal na base, para pedir só o que veio depois."""
     linha = con.execute("SELECT max(data) FROM pedais").fetchone()[0]
@@ -112,11 +116,20 @@ def ultima_data(con) -> int:
         raise RuntimeError(
             "A base está vazia. Faça a carga inicial com src/importar.py."
         )
-    return int(pd.Timestamp(linha).timestamp())
+    # Uma folga de um dia cobre o fuso e qualquer atividade editada depois;
+    # os repetidos saem pelo filtro de id.
+    return int(pd.Timestamp(linha).timestamp()) - 86400
 
 
-def buscar_novas(token: str, depois: int) -> list:
-    """Atividades posteriores a `depois`, página a página."""
+def buscar_novas(token: str, depois: int, ja_tenho: set) -> list:
+    """Atividades posteriores a `depois`, página a página.
+
+    O `after` da API compara pela data em UTC, e a base guarda a hora local —
+    três horas de diferença aqui. Por isso o último pedal da base volta na
+    busca, e rodar duas vezes seguidas tentaria inseri-lo de novo. Filtrar
+    pelo id resolve de vez e deixa o script idempotente: rodar quantas vezes
+    quiser não muda o resultado.
+    """
     novas, pagina = [], 1
     while True:
         lote = pedir("/athlete/activities", token,
@@ -128,7 +141,8 @@ def buscar_novas(token: str, depois: int) -> list:
             break
         pagina += 1
     # Só pedaladas: a base é sobre isso, e um dia pode entrar outro esporte.
-    return [a for a in novas if a.get("type") == "Ride"]
+    return [a for a in novas
+            if a.get("type") == "Ride" and int(a["id"]) not in ja_tenho]
 
 
 def buscar_traco(token: str, id_atividade: int):
@@ -319,7 +333,7 @@ def main() -> None:
         ultimo = pd.Timestamp(depois, unit="s")
         print(f"último pedal na base: {ultimo:%d/%m/%Y}")
 
-        atividades = buscar_novas(token, depois)
+        atividades = buscar_novas(token, depois, ids_na_base(con))
         if not atividades:
             print("nenhum pedal novo")
             return
