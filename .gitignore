@@ -12,6 +12,7 @@ data/
 .env
 secrets.json
 tokens.json
+strava_token.json
 
 # Python
 __pycache__/
@@ -29,3 +30,6 @@ desktop.ini
 # Editores
 .vscode/
 .idea/
+
+# Rascunho de consultas, muda a cada uso
+src/consulta.py
