@@ -837,6 +837,53 @@ def ler(con, com_rota: bool = False) -> list:
     return saida
 
 
+def cidades_visitadas(con) -> dict:
+    """Quantos pedais passaram por cada cidade, e a data da primeira vez.
+
+    Mesma consulta do contornos.py. É aqui de propósito: esta parte muda a cada
+    pedal novo, enquanto a geometria dos contornos quase nunca muda. Lendo do
+    banco a cada geração, o mapa acompanha os pedais sem precisar regerar o
+    contornos.json.
+    """
+    try:
+        linhas = con.execute(f"""
+            SELECT c.cidade, c.uf,
+                   count(DISTINCT c.arquivo) AS pedais,
+                   min(p.data)::DATE::VARCHAR AS primeira
+            FROM cidades c JOIN pedais p USING (arquivo)
+            WHERE c.pontos > {MIN_PERMANENCIA}
+            GROUP BY 1, 2
+        """).fetchall()
+    except duckdb.Error:
+        return {}
+    return {
+        f"{cidade}|{uf}": {"n": int(n), "desde": desde}
+        for cidade, uf, n, desde in linhas
+    }
+
+
+def dados_do_mapa(contornos: Path, visitadas: dict) -> str:
+    """Geometria do arquivo, cidades visitadas do banco.
+
+    O contornos.json guarda as duas coisas, mas só a geometria envelhece bem:
+    a lista de cidades gravada nele é do dia em que o script rodou. Trocar aqui
+    evita que um pedal num lugar novo some do mapa.
+    """
+    c = json.loads(contornos.read_text(encoding="utf-8"))
+    c["visitadas"] = visitadas
+
+    # Um estado visitado cujos municípios não estão no arquivo não abre ao
+    # clique. Acontece no primeiro pedal num estado novo.
+    com_contorno = {m["uf"] for m in c.get("municipios", [])}
+    faltando = {k.split("|")[1] for k in visitadas} - com_contorno
+    if faltando:
+        print(f"aviso: {', '.join(sorted(faltando))} sem contorno municipal — "
+              f"rode src/contornos.py para o mapa abrir esse(s) estado(s)")
+
+    return "const C=" + json.dumps(c, ensure_ascii=False,
+                                   separators=(",", ":")) + ";"
+
+
 def pagina(titulo: str, atual: str, gerados: set, corpo: str,
            dados: list, script: str, extra: str = "") -> str:
     embutido = json.dumps(dados, ensure_ascii=False, separators=(",", ":"))
@@ -935,6 +982,7 @@ def main() -> None:
     with duckdb.connect(str(BANCO), read_only=True) as con:
         dados = ler(con)
         com_rota = ler(con, com_rota=True)
+        visitadas = cidades_visitadas(con)
 
     contornos = RAIZ / "data" / "contornos.json"
     tem_mapa = contornos.exists()
@@ -965,7 +1013,7 @@ def main() -> None:
         paginas["mapa.html"] = pagina(
             "mapa · conatusride", "mapa.html", gerados, CORPO_MAPA, com_rota,
             SCRIPT_MAPA,
-            extra="const C=" + contornos.read_text(encoding="utf-8") + ";",
+            extra=dados_do_mapa(contornos, visitadas),
         )
 
     for arquivo, html in paginas.items():

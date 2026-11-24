@@ -67,7 +67,19 @@ mapa e sem camada de imagem, para continuar funcionando offline.
 
 Precisa de `data/contornos.json`, gerado uma vez por `src/contornos.py`.
 
-## Ordem dos scripts
+## No dia a dia
+
+Dois cliques em `atualizar.bat`, na raiz. Ele ativa o ambiente, busca os pedais
+novos na API, classifica, regera as telas e abre o painel.
+
+Para só olhar o painel, sem atualizar, abra `docs/site/index.html` — são
+arquivos estáticos, não precisam de nada rodando.
+
+## Carga completa
+
+Só quando for refazer a base do zero. Baixar a exportação no Strava, apagar
+`data/raw/` antes de extrair — senão os arquivos antigos ficam misturados e os
+scripts os processam à toa — e rodar:
 
 ```
 importar.py        exportação do Strava -> tabela pedais
@@ -79,9 +91,6 @@ contornos.py       malha do IBGE -> contornos.json  (só quando mudar de estado)
 gerar_site.py      as seis telas
 ```
 
-Depois de uma exportação nova, apagar `data/raw/` antes de extrair — senão os
-arquivos antigos ficam misturados e os scripts os processam à toa.
-
 ## Ressalvas conhecidas
 
 - **Modalidade** é uma só: o Strava classificou tudo como "Pedalada". O que faz
@@ -92,11 +101,12 @@ arquivos antigos ficam misturados e os scripts os processam à toa.
   exibidos: são cálculo do Strava a partir de peso e elevação, não medição.
   Medidor de cadência não resolve — cadência é rotação por minuto.
 - **Elevação acima de 30 m/km é descartada** (decisão 23): três pedais em 974
-  tinham erro de altímetro.
+  tinham erro de altímetro. A regra vale também para os pedais vindos da API.
+- **Pedais vindos da API ficam sem clima, inclinação e distância em terra** — a
+  API não entrega esses campos. Não afeta nenhuma análise.
 
 ## A fazer
 
 - Aprimorar a tela de recordes.
-- Rotas desenhadas no mapa, além das cidades. Os 106 mil pontos por minuto já
-  existem em `tracos`.
-- v2: a API do Strava para os pedais novos, em vez de reexportar tudo.
+- Rotas desenhadas no mapa, além das cidades. Os pontos por minuto já existem
+  em `tracos`.
